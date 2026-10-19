@@ -1,5 +1,6 @@
 """Renderer tests: pure event list in, Pillow image out."""
 
+from collections import Counter
 from datetime import date, time, timedelta
 from pathlib import Path
 
@@ -10,17 +11,12 @@ from calendar_grid.background import background_for_week
 from calendar_grid.renderer import (
     BLOCK_PAD_X,
     COL_W,
-    DAY_LABEL_GAP,
-    DAY_LABEL_H,
-    GRID_GAP,
+    GRID_TOP,
     GUTTER,
     HOUR_H,
     LEGEND_SPINE_W,
     MARGIN_TOP,
     START_HOUR,
-    SUBTITLE_H,
-    TITLE_GAP,
-    TITLE_H,
     UNKNOWN_SPINE,
     WAR_YELLOW,
     WYK_ORANGE,
@@ -31,6 +27,7 @@ from calendar_grid.renderer import (
     format_room,
     hour_segments,
     layout_block,
+    legend_forms,
     render_week,
 )
 from plan_parser import Event, events_for_week, parse_pdf
@@ -151,7 +148,6 @@ def test_unknown_form_renders_light_spine(week_19: list[Event]):
 def test_hour_segments_omit_covered_hours():
     monday = date(2026, 10, 19)
     days = [monday + timedelta(days=i) for i in range(5)]
-    grid_top = _grid_top()
     event = Event(
         date=monday,
         start=time(9, 40),
@@ -166,12 +162,11 @@ def test_hour_segments_omit_covered_hours():
         tracks="",
         notes="",
     )
-    segments = hour_segments(days, [event], grid_top)
+    segments = hour_segments(days, [event], GRID_TOP)
     by_hour: dict[int, list[int]] = {}
-    for x0, x1, y in segments:
-        assert x1 == x0 + COL_W
-        hour = START_HOUR + (y - grid_top) // HOUR_H
-        by_hour.setdefault(hour, []).append(x0)
+    for x, y in segments:
+        hour = START_HOUR + (y - GRID_TOP) // HOUR_H
+        by_hour.setdefault(hour, []).append(x)
     assert col_x(0) in by_hour[9]
     assert col_x(0) not in by_hour[10]
     assert col_x(0) not in by_hour[11]
@@ -180,9 +175,37 @@ def test_hour_segments_omit_covered_hours():
     assert col_x(1) in by_hour[10]
 
 
+def test_legend_orders_known_forms_then_unknown():
+    monday = date(2026, 10, 19)
+
+    def event(form: str, day: int = 0) -> Event:
+        return Event(
+            date=monday + timedelta(days=day),
+            start=time(10, 0),
+            end=time(11, 0),
+            duration="",
+            subject="",
+            form=form,
+            groups="",
+            room="",
+            lecturer="",
+            credit_form="",
+            tracks="",
+            notes="",
+        )
+
+    assert legend_forms([event("Wyk"), event("War")]) == ["War", "Wyk"]
+    assert legend_forms([event("War"), event("Ćw"), event("Zaj")]) == [
+        "War",
+        "Zaj",
+        "Ćw",
+    ]
+    assert legend_forms([event("")]) == []
+
+
 def test_hour_lines_break_at_gutters_and_blocks(week_19: list[Event]):
     image = render_week(week_19)
-    y10 = _grid_top() + (10 - START_HOUR) * HOUR_H
+    y10 = GRID_TOP + (10 - START_HOUR) * HOUR_H
     free_xs = list(range(col_x(1) + 20, col_x(1) + COL_W - 20, 10))
     gutter_xs = list(range(col_x(0) + COL_W + 6, col_x(0) + COL_W + GUTTER - 6, 2))
     free_avg = _avg_pixel_sum(image, free_xs, y10)
@@ -202,22 +225,18 @@ def test_hour_lines_break_at_gutters_and_blocks(week_19: list[Event]):
 
 def test_legend_bars_share_one_x_and_stack(week_19: list[Event]):
     image = render_week(week_19)
-    grid_top = _grid_top()
-    war_left, war_right, war_top, _ = _legend_bar_bounds(image, WAR_YELLOW, grid_top)
-    wyk_left, wyk_right, _, _ = _legend_bar_bounds(image, WYK_ORANGE, grid_top)
+    war_left, war_right, war_top, _ = _legend_bar_bounds(image, WAR_YELLOW, GRID_TOP)
+    wyk_left, wyk_right, wyk_top, _ = _legend_bar_bounds(image, WYK_ORANGE, GRID_TOP)
     assert war_left == wyk_left
     assert war_right - war_left == LEGEND_SPINE_W
     assert wyk_right - wyk_left == LEGEND_SPINE_W
-    wyk_top = _legend_bar_bounds(image, WYK_ORANGE, grid_top)[2]
     assert war_top < wyk_top
 
 
 def test_legend_is_bare_not_frosted(week_19: list[Event]):
     image = render_week(week_19)
-    grid_top = _grid_top()
-    bar_left, _, _, bar_top = _legend_bar_bounds(image, WAR_YELLOW, grid_top)[:4]
+    bar_left, _, bar_top, bar_bottom = _legend_bar_bounds(image, WAR_YELLOW, GRID_TOP)
     # Mid-bar y keeps clear of text; gap xs sit between the spine and the label.
-    _, _, _, bar_bottom = _legend_bar_bounds(image, WAR_YELLOW, grid_top)
     y = (bar_top + bar_bottom) // 2
     gap_xs = list(
         range(bar_left + LEGEND_SPINE_W + 2, bar_left + LEGEND_SPINE_W + 10, 2)
@@ -245,7 +264,7 @@ def test_legend_unknown_form_fallback(week_19: list[Event]):
         notes=base.notes,
     )
     image = render_week([event])
-    left, right, _, _ = _legend_bar_bounds(image, UNKNOWN_SPINE, _grid_top())
+    left, right, _, _ = _legend_bar_bounds(image, UNKNOWN_SPINE, GRID_TOP)
     assert right - left == LEGEND_SPINE_W
 
 
@@ -325,21 +344,9 @@ def test_empty_room_renders_time_only():
     assert lines[1][0] == "10:00–11:30"
 
 
-def _grid_top() -> int:
-    return (
-        MARGIN_TOP
-        + TITLE_H
-        + TITLE_GAP
-        + SUBTITLE_H
-        + DAY_LABEL_H
-        + DAY_LABEL_GAP
-        + GRID_GAP
-    )
-
-
 def _block_top_bottom(event: Event) -> tuple[float, float]:
-    top = _grid_top() + _minutes(event.start) * HOUR_H / 60
-    bottom = _grid_top() + _minutes(event.end) * HOUR_H / 60
+    top = GRID_TOP + _minutes(event.start) * HOUR_H / 60
+    bottom = GRID_TOP + _minutes(event.end) * HOUR_H / 60
     return top, bottom
 
 
@@ -393,8 +400,6 @@ def _legend_bar_bounds(
             if _close(pixel, color):
                 matches.append((x, y))
     assert matches, "no legend bar found"
-    from collections import Counter
-
     counts = Counter(x for x, _ in matches)
     dense = {x for x, count in counts.items() if count >= 15}
     assert dense, "no dense legend bar found"

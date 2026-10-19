@@ -26,6 +26,8 @@ KON_PINK = (229, 168, 178)
 START_HOUR = 8
 END_HOUR = 22
 HOUR_H = 100
+# Hour rows stop this far from event-block edges so lines never touch blocks.
+HOUR_CLEARANCE = 4
 COL_W = 300
 GUTTER = 24
 AXIS_W = 76
@@ -48,6 +50,15 @@ SUBTITLE_H = 40
 DAY_LABEL_H = 30
 DAY_LABEL_GAP = 36
 GRID_GAP = 12
+GRID_TOP = (
+    MARGIN_TOP
+    + TITLE_H
+    + TITLE_GAP
+    + SUBTITLE_H
+    + DAY_LABEL_H
+    + DAY_LABEL_GAP
+    + GRID_GAP
+)
 
 # Class-block geometry: inset from the column edge, thick spine on the left,
 # then text with a right inset. Text lines use 6pt leading.
@@ -61,9 +72,14 @@ META_STEP = 27
 LINE_SLACK = 8
 
 # Frosted glass for event blocks: blur and white overlay, plus corner radius.
+EVENT_BLUR_RADIUS = 14
 EVENT_WHITE_ALPHA = 32
 EVENT_RADIUS = 12
+
+# Legend: bare spine bar plus label at a fixed gap, rows stacked with the same gap.
 LEGEND_SPINE_W = 7
+LEGEND_BAR_H = 28
+LEGEND_GAP = 12
 
 DAY_NAMES = [
     "Poniedziałek",
@@ -96,6 +112,7 @@ FORM_STYLES = {
 
 LineKind = Literal["subject", "meta"]
 BlockLine = tuple[str, LineKind]
+HourSegment = tuple[int, int]
 BlockMeasure = Callable[[str, LineKind], float]
 WidthMeasure = Callable[[str], float]
 
@@ -120,16 +137,7 @@ def render_week(events: list[Event]) -> Image.Image:
     days = [monday + timedelta(days=i) for i in range(7 if weekend else 5)]
 
     width = col_x(len(days) - 1) + COL_W + MARGIN_X
-    grid_top = (
-        MARGIN_TOP
-        + TITLE_H
-        + TITLE_GAP
-        + SUBTITLE_H
-        + DAY_LABEL_H
-        + DAY_LABEL_GAP
-        + GRID_GAP
-    )
-    grid_bottom = grid_top + (END_HOUR - START_HOUR) * HOUR_H
+    grid_bottom = GRID_TOP + (END_HOUR - START_HOUR) * HOUR_H
     height = grid_bottom + MARGIN_BOTTOM
 
     # Two layers: `base` holds the background with frosted glass melted into it,
@@ -139,9 +147,9 @@ def render_week(events: list[Event]) -> Image.Image:
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     _draw_header(draw, width, monday, days[-1], events)
-    _draw_grid(draw, days, grid_top, events)
+    _draw_grid(draw, days, GRID_TOP, hour_segments(days, events, GRID_TOP))
     for event in sorted(events, key=lambda e: (e.date, e.start)):
-        _draw_event(base, draw, event, days, grid_top)
+        _draw_event(base, draw, event, days, GRID_TOP)
     composited = Image.alpha_composite(base, overlay).convert("RGB")
     return apply_grain(composited, monday.toordinal())
 
@@ -153,8 +161,8 @@ def col_x(index: int) -> int:
 
 def hour_segments(
     days: list[date], events: list[Event], grid_top: int
-) -> list[tuple[int, int, int]]:
-    """Hour-row segments per day column, omitting rows covered by events."""
+) -> list[HourSegment]:
+    """Left x and y of each hour-row segment, skipping rows covered by events."""
     spans: dict[int, list[tuple[float, float]]] = {}
     for event in events:
         col = (event.date - days[0]).days
@@ -162,18 +170,26 @@ def hour_segments(
             top = grid_top + _offset_minutes(event.start) * HOUR_H / 60
             bottom = grid_top + _offset_minutes(event.end) * HOUR_H / 60
             spans.setdefault(col, []).append((top, bottom))
-    segments: list[tuple[int, int, int]] = []
+    segments: list[HourSegment] = []
     for hour in range(START_HOUR, END_HOUR + 1):
         y = grid_top + (hour - START_HOUR) * HOUR_H
         for i in range(len(days)):
             covered = any(
-                top - 4 <= y <= bottom + 4 for top, bottom in spans.get(i, [])
+                top - HOUR_CLEARANCE <= y <= bottom + HOUR_CLEARANCE
+                for top, bottom in spans.get(i, [])
             )
-            if covered:
-                continue
-            x0 = col_x(i)
-            segments.append((x0, x0 + COL_W, y))
+            if not covered:
+                segments.append((col_x(i), y))
     return segments
+
+
+def legend_forms(events: list[Event]) -> list[str]:
+    """Form codes in legend order: known forms first, then unknown alphabetically."""
+    forms = [e.form for e in events]
+    known = [form for form in FORM_STYLES if form in forms]
+    # Unknown non-empty forms keep their code as the label; an empty form has no label to show.
+    unknown = sorted({form for form in forms if form and form not in FORM_STYLES})
+    return [*known, *unknown]
 
 
 def apply_grain(
@@ -191,26 +207,20 @@ def apply_grain(
     return Image.blend(image, overlaid, opacity)
 
 
-def _frost(
-    base: Image.Image,
-    box: tuple[int, int, int, int],
-    blur_radius: int = 14,
-    white_alpha: int = EVENT_WHITE_ALPHA,
-    corner_radius: int = EVENT_RADIUS,
-) -> None:
-    """Frost a rounded rect of the background in place with blur + white."""
+def _frost(base: Image.Image, box: tuple[int, int, int, int]) -> None:
+    """Frost an event block's background in place with blur + white."""
     left, top, right, bottom = (int(v) for v in box)
     width, height = right - left, bottom - top
     if width <= 0 or height <= 0:
         return
     region = base.crop((left, top, right, bottom)).filter(
-        ImageFilter.GaussianBlur(blur_radius)
+        ImageFilter.GaussianBlur(EVENT_BLUR_RADIUS)
     )
-    white = Image.new("RGBA", (width, height), (255, 255, 255, white_alpha))
+    white = Image.new("RGBA", (width, height), (255, 255, 255, EVENT_WHITE_ALPHA))
     frosted = Image.alpha_composite(region.convert("RGBA"), white)
     mask = Image.new("L", (width, height), 0)
     ImageDraw.Draw(mask).rounded_rectangle(
-        [0, 0, width, height], radius=corner_radius, fill=255
+        [0, 0, width, height], radius=EVENT_RADIUS, fill=255
     )
     base.paste(frosted, (left, top), mask)
 
@@ -252,37 +262,34 @@ def _draw_legend(
     subtitle_bottom: float,
     events: list[Event],
 ) -> None:
-    forms = [e.form for e in events]
-    ordered = [f for f in ("War", "Wyk", "Kon") if f in forms]
-    # Unknown non-empty forms keep their code as the label; an empty form has no label to show.
-    ordered += sorted({f for f in forms if f and f not in FORM_STYLES})
+    ordered = legend_forms(events)
     if not ordered:
         return
     font = _font("regular", LEGEND_SIZE)
-    labels = [FORM_STYLES.get(form, (form, UNKNOWN_SPINE))[0] for form in ordered]
-    longest = max(draw.textlength(label, font=font) for label in labels)
-    block_x = width - MARGIN_X - LEGEND_SPINE_W - 12 - longest
-    chip_h, gap = 28, 12
-    total_h = len(ordered) * (chip_h + gap) - gap
+    styled = [FORM_STYLES.get(form, (form, UNKNOWN_SPINE)) for form in ordered]
+    longest = max(draw.textlength(label, font=font) for label, _ in styled)
+    block_x = width - MARGIN_X - LEGEND_SPINE_W - LEGEND_GAP - longest
+    total_h = len(styled) * (LEGEND_BAR_H + LEGEND_GAP) - LEGEND_GAP
     y = subtitle_bottom - total_h
-    for form, label in zip(ordered, labels):
-        color = FORM_STYLES.get(form, (form, UNKNOWN_SPINE))[1]
-        draw.rectangle([block_x, y, block_x + LEGEND_SPINE_W, y + chip_h], fill=color)
+    for label, color in styled:
+        draw.rectangle(
+            [block_x, y, block_x + LEGEND_SPINE_W, y + LEGEND_BAR_H], fill=color
+        )
         draw.text(
-            (block_x + LEGEND_SPINE_W + 12, y + chip_h / 2),
+            (block_x + LEGEND_SPINE_W + LEGEND_GAP, y + LEGEND_BAR_H / 2),
             label,
             font=font,
             fill=OFF_WHITE,
             anchor="lm",
         )
-        y += chip_h + gap
+        y += LEGEND_BAR_H + LEGEND_GAP
 
 
 def _draw_grid(
     draw: ImageDraw.ImageDraw,
     days: list[date],
     grid_top: int,
-    events: list[Event],
+    segments: list[HourSegment],
 ) -> None:
     left = col_x(0)
     axis_font = _font("regular", AXIS_SIZE)
@@ -295,8 +302,8 @@ def _draw_grid(
             fill=AXIS_LABEL,
             anchor="rm",
         )
-    for x0, x1, y in hour_segments(days, events, grid_top):
-        draw.line([(x0, y), (x1, y)], fill=HOUR_LINE, width=2)
+    for x, y in segments:
+        draw.line([(x, y), (x + COL_W, y)], fill=HOUR_LINE, width=2)
     day_font = _font("regular", DAY_SIZE)
     for i, day in enumerate(days):
         x = col_x(i)
@@ -326,8 +333,6 @@ def _draw_event(
     _frost(
         base,
         (int(box[0]), int(box[1]), int(box[2]), int(box[3])),
-        white_alpha=EVENT_WHITE_ALPHA,
-        corner_radius=EVENT_RADIUS,
     )
     draw.rounded_rectangle(box, radius=EVENT_RADIUS, outline=EVENT_BORDER, width=1)
     draw.rectangle([x, top, x + SPINE_W, bottom], fill=spine_color)
