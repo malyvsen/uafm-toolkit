@@ -8,7 +8,8 @@ import pdfplumber
 
 from plan_parser.events import Event
 
-DATE_PREFIX = "Data Zajęć:"
+_DATE_PREFIX = "Data Zajęć:"
+_SUBJECT_COLUMN = 4
 _DATE_RE = re.compile(r"^Data Zajęć:\s*(\d{4})\.(\d{2})\.(\d{2})")
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 _HYPHEN_BREAK_RE = re.compile(r"(?<=\S)-\n\s*")
@@ -39,12 +40,11 @@ def parse_pdf(path: Path | str) -> list[Event]:
 
 
 def _is_header(row: list[str | None]) -> bool:
-    cell = row[4] if len(row) > 4 else None
-    return "Zajęcia" in (cell or "")
+    return len(row) > _SUBJECT_COLUMN and "Zajęcia" in (row[_SUBJECT_COLUMN] or "")
 
 
 def _is_date_row(row: list[str | None]) -> bool:
-    return (row[0] or "").startswith(DATE_PREFIX)
+    return (row[0] or "").startswith(_DATE_PREFIX)
 
 
 def _parse_date_row(row: list[str | None]) -> date:
