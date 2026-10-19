@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from calendar_grid.background import background_for_week
 from calendar_grid.renderer import (
     COL_W,
-    INK,
+    UNKNOWN_SPINE,
     WAR_YELLOW,
     WYK_ORANGE,
     format_room,
@@ -79,14 +80,25 @@ def test_format_room(raw: str, expected: str):
     assert format_room(raw) == expected
 
 
-def test_block_colors_follow_class_form(week_19: list[Event]):
+def test_block_spines_follow_class_form(week_19: list[Event]):
     image = render_week(week_19)
-    # Block interiors near the bottom edge, clear of text: Monday Warsztaty, Thursday Wykład.
-    assert image.getpixel((262, 643)) == WAR_YELLOW
-    assert image.getpixel((1162, 976)) == WYK_ORANGE
+    # 4px from the block left edge at the vertical center: Monday Warsztaty, Thursday Wykład.
+    monday_spine = image.getpixel((121, 537))
+    thursday_spine = image.getpixel((1021, 870))
+    assert isinstance(monday_spine, tuple) and _close(monday_spine, WAR_YELLOW)
+    assert isinstance(thursday_spine, tuple) and _close(thursday_spine, WYK_ORANGE)
 
 
-def test_unknown_form_renders_dark(week_19: list[Event]):
+def test_block_interiors_are_frosted_not_solid(week_19: list[Event]):
+    image = render_week(week_19)
+    interior = image.getpixel((262, 643))
+    bare = background_for_week(date(2026, 10, 19), *image.size).getpixel((262, 643))
+    assert isinstance(interior, tuple) and isinstance(bare, tuple)
+    assert interior != WAR_YELLOW
+    assert sum(interior) > sum(bare)
+
+
+def test_unknown_form_renders_light_spine(week_19: list[Event]):
     base = week_19[0]
     event = Event(
         date=base.date,
@@ -103,7 +115,14 @@ def test_unknown_form_renders_dark(week_19: list[Event]):
         notes=base.notes,
     )
     image = render_week([event])
-    assert image.getpixel((262, 643)) == INK
+    spine = image.getpixel((121, 537))
+    assert isinstance(spine, tuple) and _close(spine, UNKNOWN_SPINE)
+
+
+def _close(
+    actual: tuple[int, ...], expected: tuple[int, ...], tolerance: int = 8
+) -> bool:
+    return all(abs(a - e) <= tolerance for a, e in zip(actual, expected))
 
 
 def test_render_rejects_empty_week():

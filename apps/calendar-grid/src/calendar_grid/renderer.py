@@ -10,8 +10,6 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from calendar_grid.background import background_for_week
 from plan_parser import Event
 
-CREAM = (246, 241, 227)
-INK = (43, 38, 33)
 OFF_WHITE = (244, 245, 246)
 SOFT_GREY = (185, 192, 201)
 AXIS_LABEL = (244, 245, 246, 160)
@@ -20,6 +18,8 @@ TOP_RULE = (255, 255, 255, 70)
 DAY_DIVIDER = (255, 255, 255, 28)
 OUTER_BORDER = (255, 255, 255, 70)
 SHELL_BORDER = (255, 255, 255, 46)
+EVENT_BORDER = (255, 255, 255, 90)
+UNKNOWN_SPINE = (154, 163, 175)
 WAR_YELLOW = (233, 202, 110)
 WYK_ORANGE = (216, 142, 93)
 KON_PINK = (229, 168, 178)
@@ -64,6 +64,11 @@ LINE_SLACK = 8
 # Frosted grid shell: padding around the timetable area and corner radius.
 SHELL_PAD = 18
 SHELL_RADIUS = 18
+
+# Event blocks use a slightly stronger frost than the shell.
+EVENT_WHITE_ALPHA = 32
+EVENT_RADIUS = 12
+CHIP_RADIUS = 6
 
 DAY_NAMES = [
     "Poniedziałek",
@@ -141,10 +146,10 @@ def render_week(events: list[Event]) -> Image.Image:
     draw.rounded_rectangle(
         shell_box, radius=SHELL_RADIUS, outline=SHELL_BORDER, width=2
     )
-    _draw_header(draw, width, monday, days[-1], events)
+    _draw_header(base, draw, width, monday, days[-1], events)
     _draw_grid(draw, days, grid_top)
     for event in sorted(events, key=lambda e: (e.date, e.start)):
-        _draw_event(draw, event, days, grid_top)
+        _draw_event(base, draw, event, days, grid_top)
     return Image.alpha_composite(base, overlay).convert("RGB")
 
 
@@ -153,6 +158,7 @@ def _frost(
     box: tuple[int, int, int, int],
     radius: int = 14,
     white_alpha: int = 26,
+    corner_radius: int = SHELL_RADIUS,
 ) -> None:
     """Frost a rounded rect of the background in place with blur + white."""
     left, top, right, bottom = (int(v) for v in box)
@@ -166,13 +172,18 @@ def _frost(
     frosted = Image.alpha_composite(region.convert("RGBA"), white)
     mask = Image.new("L", (width, height), 0)
     ImageDraw.Draw(mask).rounded_rectangle(
-        [0, 0, width, height], radius=SHELL_RADIUS, fill=255
+        [0, 0, width, height], radius=corner_radius, fill=255
     )
     base.paste(frosted, (left, top), mask)
 
 
 def _draw_header(
-    draw: ImageDraw.ImageDraw, width: int, monday: date, last: date, events: list[Event]
+    base: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    width: int,
+    monday: date,
+    last: date,
+    events: list[Event],
 ) -> None:
     title = _font("bold", TITLE_SIZE)
     subtitle_font = _font("regular", SUBTITLE_SIZE)
@@ -181,7 +192,7 @@ def _draw_header(
     subtitle_top = MARGIN_TOP + 76 + 8
     draw.text((MARGIN_X, subtitle_top), subtitle, font=subtitle_font, fill=SOFT_GREY)
     bottom = draw.textbbox((MARGIN_X, subtitle_top), subtitle, font=subtitle_font)[3]
-    _draw_legend(draw, width, bottom, events)
+    _draw_legend(base, draw, width, bottom, events)
 
 
 def _week_range(monday: date, last: date) -> str:
@@ -199,7 +210,11 @@ def _week_range(monday: date, last: date) -> str:
 
 
 def _draw_legend(
-    draw: ImageDraw.ImageDraw, width: int, subtitle_bottom: float, events: list[Event]
+    base: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    width: int,
+    subtitle_bottom: float,
+    events: list[Event],
 ) -> None:
     forms = [e.form for e in events]
     ordered = [f for f in ("War", "Wyk", "Kon") if f in forms]
@@ -210,13 +225,21 @@ def _draw_legend(
     total_h = len(ordered) * (chip_h + gap) - gap
     y = subtitle_bottom - total_h
     for form in ordered:
-        label, color = FORM_STYLES.get(form, (form, INK))
-        spine_color = CREAM if form not in FORM_STYLES else INK
+        label, color = FORM_STYLES.get(form, (form, UNKNOWN_SPINE))
         x = width - MARGIN_X - chip_w - 12 - draw.textlength(label, font=font)
-        draw.rectangle(
-            [x, y, x + chip_w, y + chip_h], fill=color, outline=OFF_WHITE, width=2
+        _frost(
+            base,
+            (int(x), int(y), int(x + chip_w), int(y + chip_h)),
+            white_alpha=EVENT_WHITE_ALPHA,
+            corner_radius=CHIP_RADIUS,
         )
-        draw.rectangle([x, y, x + 7, y + chip_h], fill=spine_color)
+        draw.rounded_rectangle(
+            [x, y, x + chip_w, y + chip_h],
+            radius=CHIP_RADIUS,
+            outline=EVENT_BORDER,
+            width=1,
+        )
+        draw.rectangle([x, y, x + 7, y + chip_h], fill=color)
         draw.text(
             (x + chip_w + 12, y + chip_h / 2),
             label,
@@ -262,7 +285,11 @@ def _draw_grid(draw: ImageDraw.ImageDraw, days: list[date], grid_top: int) -> No
 
 
 def _draw_event(
-    draw: ImageDraw.ImageDraw, event: Event, days: list[date], grid_top: int
+    base: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    event: Event,
+    days: list[date],
+    grid_top: int,
 ) -> None:
     col = (event.date - days[0]).days
     top = grid_top + _offset_minutes(event.start) * HOUR_H / 60
@@ -270,10 +297,15 @@ def _draw_event(
     x = MARGIN_X + AXIS_W + col * COL_W + BLOCK_PAD_X
     box = [x, top, x + COL_W - 2 * BLOCK_PAD_X, bottom]
     style = FORM_STYLES.get(event.form)
-    color = style[1] if style else INK
-    dark = style is None
-    draw.rectangle(box, fill=color, outline=INK, width=2)
-    draw.rectangle([x, top, x + SPINE_W, bottom], fill=CREAM if dark else INK)
+    spine_color = style[1] if style else UNKNOWN_SPINE
+    _frost(
+        base,
+        (int(x), int(top), int(x + COL_W - 2 * BLOCK_PAD_X), int(bottom)),
+        white_alpha=EVENT_WHITE_ALPHA,
+        corner_radius=EVENT_RADIUS,
+    )
+    draw.rounded_rectangle(box, radius=EVENT_RADIUS, outline=EVENT_BORDER, width=1)
+    draw.rectangle([x, top, x + SPINE_W, bottom], fill=spine_color)
 
     text_w = COL_W - 2 * BLOCK_PAD_X - SPINE_W - TEXT_GAP - TEXT_PAD_RIGHT
     long = _duration_minutes(event) >= LONG_BLOCK_MINUTES
@@ -283,27 +315,27 @@ def _draw_event(
     meta_font = _font("italic", META_SIZE)
     if long:
         lines = [
-            (l, subject_font, SUBJECT_STEP)
+            (l, subject_font, SUBJECT_STEP, OFF_WHITE)
             for l in _wrap(event.subject, subject_font, text_w, 2, draw)
         ]
-        lines.append((time_range, meta_font, META_STEP))
+        lines.append((time_range, meta_font, META_STEP, SOFT_GREY))
         if room:
-            lines.append((room, meta_font, META_STEP))
+            lines.append((room, meta_font, META_STEP, SOFT_GREY))
     else:
         lines = [
-            (l, subject_font, SUBJECT_STEP)
+            (l, subject_font, SUBJECT_STEP, OFF_WHITE)
             for l in _wrap(event.subject, subject_font, text_w, 1, draw)
         ]
         meta = time_range if not room else f"{time_range} · {room}"
-        lines.append((_truncate(meta, meta_font, text_w, draw), meta_font, META_STEP))
+        lines.append(
+            (_truncate(meta, meta_font, text_w, draw), meta_font, META_STEP, SOFT_GREY)
+        )
 
     y = top + BLOCK_PAD_Y
-    for text, font, step in lines:
+    for text, font, step, fill in lines:
         if y + step - LINE_SLACK > bottom - BLOCK_PAD_Y:
             break
-        draw.text(
-            (x + SPINE_W + TEXT_GAP, y), text, font=font, fill=CREAM if dark else INK
-        )
+        draw.text((x + SPINE_W + TEXT_GAP, y), text, font=font, fill=fill)
         y += step
 
 
