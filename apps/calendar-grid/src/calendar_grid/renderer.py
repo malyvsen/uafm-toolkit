@@ -2,9 +2,11 @@
 
 import random
 import re
+from collections.abc import Callable
 from datetime import date, time, timedelta
 from functools import cache
 from pathlib import Path
+from typing import Any, Literal, cast
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
@@ -330,35 +332,87 @@ def _draw_event(
     draw.rectangle([x, top, x + SPINE_W, bottom], fill=spine_color)
 
     text_w = COL_W - 2 * BLOCK_PAD_X - SPINE_W - TEXT_GAP - TEXT_PAD_RIGHT
-    long = _duration_minutes(event) >= LONG_BLOCK_MINUTES
+    block_h = bottom - top
     time_range = f"{event.start.hour}:{event.start.minute:02d}–{event.end.hour}:{event.end.minute:02d}"
     room = format_room(event.room)
     subject_font = _font("bold", SUBJECT_SIZE)
     meta_font = _font("italic", META_SIZE)
-    if long:
-        lines = [
-            (l, subject_font, SUBJECT_STEP, OFF_WHITE)
-            for l in _wrap(event.subject, subject_font, text_w, 2, draw)
-        ]
-        lines.append((time_range, meta_font, META_STEP, SOFT_GREY))
-        if room:
-            lines.append((room, meta_font, META_STEP, SOFT_GREY))
-    else:
-        lines = [
-            (l, subject_font, SUBJECT_STEP, OFF_WHITE)
-            for l in _wrap(event.subject, subject_font, text_w, 1, draw)
-        ]
-        meta = time_range if not room else f"{time_range} · {room}"
-        lines.append(
-            (_truncate(meta, meta_font, text_w, draw), meta_font, META_STEP, SOFT_GREY)
+
+    def measure(text: str, kind: Literal["subject", "meta"]) -> float:
+        return draw.textlength(
+            text, font=subject_font if kind == "subject" else meta_font
         )
 
+    lines = layout_block(
+        event.subject,
+        time_range,
+        room,
+        text_w,
+        block_h,
+        measure,
+        _duration_minutes(event),
+    )
+    fonts = {"subject": subject_font, "meta": meta_font}
+    steps = {"subject": SUBJECT_STEP, "meta": META_STEP}
+    fills = {"subject": OFF_WHITE, "meta": SOFT_GREY}
+
     y = top + BLOCK_PAD_Y
-    for text, font, step, fill in lines:
-        if y + step - LINE_SLACK > bottom - BLOCK_PAD_Y:
+    for text, kind in lines:
+        draw.text(
+            (x + SPINE_W + TEXT_GAP, y),
+            text,
+            font=fonts[kind],
+            fill=fills[kind],
+        )
+        y += steps[kind]
+
+
+def layout_block(
+    subject: str,
+    time_range: str,
+    room: str,
+    text_w: float,
+    block_h: float,
+    measure: Callable[[str, Literal["subject", "meta"]], float],
+    duration_minutes: float,
+) -> list[tuple[str, Literal["subject", "meta"]]]:
+    subject_marker = cast(Any, "subject")
+    meta_marker = cast(Any, "meta")
+
+    class _MeasureDraw:
+        def textlength(self, text: str, font: Any = None, **_kwargs: Any) -> float:
+            kind: Literal["subject", "meta"] = (
+                "subject" if font is subject_marker else "meta"
+            )
+            return measure(text, kind)
+
+    shim = cast(Any, _MeasureDraw())
+    raw: list[tuple[str, Literal["subject", "meta"]]] = []
+    long = duration_minutes >= LONG_BLOCK_MINUTES
+    if long:
+        raw.extend(
+            (line, "subject")
+            for line in _wrap(subject, subject_marker, text_w, 2, shim)
+        )
+        raw.append((time_range, "meta"))
+        if room:
+            raw.append((room, "meta"))
+    else:
+        raw.extend(
+            (line, "subject")
+            for line in _wrap(subject, subject_marker, text_w, 1, shim)
+        )
+        meta = time_range if not room else f"{time_range} · {room}"
+        raw.append((_truncate(meta, meta_marker, text_w, shim), "meta"))
+
+    fitted: list[tuple[str, Literal["subject", "meta"]]] = []
+    y = BLOCK_PAD_Y
+    for text, kind in raw:
+        step = SUBJECT_STEP if kind == "subject" else META_STEP
+        if y + step - LINE_SLACK > block_h - BLOCK_PAD_Y:
             break
-        draw.text((x + SPINE_W + TEXT_GAP, y), text, font=font, fill=fill)
-        y += step
+        fitted.append((text, kind))
+    return fitted
 
 
 def _offset_minutes(moment: time) -> float:
