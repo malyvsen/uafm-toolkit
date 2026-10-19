@@ -42,7 +42,6 @@ AXIS_SIZE = 20
 SUBJECT_SIZE = 24
 META_SIZE = 21
 LEGEND_SIZE = 24
-LONG_BLOCK_MINUTES = 120
 
 # Header geometry mirrors _draw_header: title line, gap, subtitle line,
 # then day labels and gaps before the grid. Fixed offsets keep renders stable.
@@ -350,7 +349,6 @@ def _draw_event(
         text_w,
         block_h,
         measure,
-        _duration_minutes(event),
     )
     fonts = {"subject": subject_font, "meta": meta_font}
     steps = {"subject": SUBJECT_STEP, "meta": META_STEP}
@@ -374,7 +372,6 @@ def layout_block(
     text_w: float,
     block_h: float,
     measure: Callable[[str, Literal["subject", "meta"]], float],
-    duration_minutes: float,
 ) -> list[tuple[str, Literal["subject", "meta"]]]:
     subject_marker = cast(Any, "subject")
     meta_marker = cast(Any, "meta")
@@ -387,40 +384,53 @@ def layout_block(
             return measure(text, kind)
 
     shim = cast(Any, _MeasureDraw())
-    raw: list[tuple[str, Literal["subject", "meta"]]] = []
-    long = duration_minutes >= LONG_BLOCK_MINUTES
-    if long:
-        raw.extend(
-            (line, "subject")
-            for line in _wrap(subject, subject_marker, text_w, 2, shim)
-        )
-        raw.append((time_range, "meta"))
-        if room:
-            raw.append((room, "meta"))
-    else:
-        raw.extend(
-            (line, "subject")
-            for line in _wrap(subject, subject_marker, text_w, 1, shim)
-        )
-        meta = time_range if not room else f"{time_range} · {room}"
-        raw.append((_truncate(meta, meta_marker, text_w, shim), "meta"))
+    subj_1: list[tuple[str, Literal["subject", "meta"]]] = [
+        (line, "subject") for line in _wrap(subject, subject_marker, text_w, 1, shim)
+    ]
+    subj_2: list[tuple[str, Literal["subject", "meta"]]] = [
+        (line, "subject") for line in _wrap(subject, subject_marker, text_w, 2, shim)
+    ]
+    time_line = _truncate(time_range, meta_marker, text_w, shim)
+    room_line = _truncate(room, meta_marker, text_w, shim) if room else ""
+    combined_line = _truncate(
+        f"{time_range} · {room}" if room else time_range,
+        meta_marker,
+        text_w,
+        shim,
+    )
 
-    fitted: list[tuple[str, Literal["subject", "meta"]]] = []
-    y = BLOCK_PAD_Y
-    for text, kind in raw:
-        step = SUBJECT_STEP if kind == "subject" else META_STEP
-        if y + step - LINE_SLACK > block_h - BLOCK_PAD_Y:
-            break
-        fitted.append((text, kind))
-    return fitted
+    def fits(lines: list[tuple[str, Literal["subject", "meta"]]]) -> bool:
+        y = BLOCK_PAD_Y
+        for _, kind in lines:
+            step = SUBJECT_STEP if kind == "subject" else META_STEP
+            if y + step - LINE_SLACK > block_h - BLOCK_PAD_Y:
+                return False
+            y += step
+        return True
+
+    candidates: list[list[tuple[str, Literal["subject", "meta"]]]] = []
+    if room:
+        candidates.append([*subj_2, (time_line, "meta"), (room_line, "meta")])
+        candidates.append([*subj_1, (time_line, "meta"), (room_line, "meta")])
+    else:
+        candidates.append([*subj_2, (time_line, "meta")])
+        candidates.append([*subj_1, (time_line, "meta")])
+    candidates.append([*subj_2, (combined_line, "meta")])
+    candidates.append([*subj_1, (combined_line, "meta")])
+    candidates.append([*subj_1])
+
+    seen: list[list[tuple[str, Literal["subject", "meta"]]]] = []
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.append(candidate)
+        if fits(candidate):
+            return candidate
+    return []
 
 
 def _offset_minutes(moment: time) -> float:
     return (moment.hour - START_HOUR) * 60 + moment.minute
-
-
-def _duration_minutes(event: Event) -> float:
-    return _offset_minutes(event.end) - _offset_minutes(event.start)
 
 
 def format_room(raw: str) -> str:

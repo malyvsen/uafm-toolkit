@@ -2,6 +2,7 @@
 
 from datetime import date, time, timedelta
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from PIL import Image, ImageStat
@@ -26,6 +27,7 @@ from calendar_grid.renderer import (
     WYK_ORANGE,
     apply_grain,
     format_room,
+    layout_block,
     render_week,
 )
 from plan_parser import Event, events_for_week, parse_pdf
@@ -156,6 +158,80 @@ def test_grain_raises_variance_on_background_patch():
     grained_std = sum(ImageStat.Stat(grained.crop(patch)).stddev)
     bare_std = sum(ImageStat.Stat(bare.crop(patch)).stddev)
     assert grained_std > bare_std
+
+
+def _fake_measure(text: str, kind: Literal["subject", "meta"]) -> float:
+    return float(len(text) * (10 if kind == "subject" else 8))
+
+
+def _block_h(minutes: float) -> float:
+    return minutes * HOUR_H / 60
+
+
+def test_short_subject_uses_separate_meta():
+    lines = layout_block(
+        "Wymowa", "10:00–11:30", "sala D 319", 200, _block_h(145), _fake_measure
+    )
+    assert [kind for _, kind in lines] == ["subject", "meta", "meta"]
+    assert lines[0][0] == "Wymowa"
+    assert lines[1][0] == "10:00–11:30"
+    assert lines[2][0] == "sala D 319"
+
+
+def test_long_subject_wraps_to_two_lines_with_separate_meta():
+    lines = layout_block(
+        "Elementarne zadania aktorskie",
+        "10:00–12:25",
+        "sala D 319",
+        150,
+        _block_h(145),
+        _fake_measure,
+    )
+    kinds = [kind for _, kind in lines]
+    assert kinds == ["subject", "subject", "meta", "meta"]
+    assert lines[0][0] == "Elementarne"
+    assert lines[2][0] == "10:00–12:25"
+    assert lines[3][0] == "sala D 319"
+
+
+def test_95min_block_uses_separate_meta():
+    lines = layout_block(
+        "Wymowa", "10:00–11:35", "sala D 319", 200, _block_h(95), _fake_measure
+    )
+    assert [kind for _, kind in lines] == ["subject", "meta", "meta"]
+
+
+def test_tight_block_falls_back_to_combined_meta():
+    lines = layout_block(
+        "Elementarne zadania aktorskie",
+        "10:00–10:45",
+        "sala D 319",
+        150,
+        _block_h(45),
+        _fake_measure,
+    )
+    assert [kind for _, kind in lines] == ["subject", "meta"]
+    assert "·" in lines[1][0]
+
+
+def test_tiny_block_renders_empty_without_crashing():
+    lines = layout_block(
+        "Wymowa", "10:00–10:20", "sala D 319", 200, _block_h(20), _fake_measure
+    )
+    assert lines == []
+
+
+def test_subject_only_when_meta_does_not_fit():
+    lines = layout_block(
+        "Wymowa", "10:00–10:30", "sala D 319", 200, _block_h(30), _fake_measure
+    )
+    assert [kind for _, kind in lines] == ["subject"]
+
+
+def test_empty_room_renders_time_only():
+    lines = layout_block("Wymowa", "10:00–11:30", "", 200, _block_h(145), _fake_measure)
+    assert [kind for _, kind in lines] == ["subject", "meta"]
+    assert lines[1][0] == "10:00–11:30"
 
 
 def _grid_top() -> int:
