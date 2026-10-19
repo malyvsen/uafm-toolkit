@@ -17,3 +17,6 @@ members = ["libs/plan-parser", "apps/calendar-grid"]
 
 [tool.pytest.ini_options]
 testpaths = ["libs", "apps"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["calendar_grid", "plan_parser"]
