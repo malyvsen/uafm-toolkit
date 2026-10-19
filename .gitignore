@@ -1,0 +1,7 @@
+.DS_Store
+.env
+.task/
+__pycache__/
+.ruff_cache/
+.venv/
+*.py[codz]
