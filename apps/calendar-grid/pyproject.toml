@@ -6,7 +6,7 @@ requires-python = ">=3.15"
 dependencies = ["cyclopts", "pillow", "plan-parser"]
 
 [project.scripts]
-calendar-grid = "calendar_grid.cli:main"
+calendar-grid = "calendar_grid.cli:app"
 
 [build-system]
 requires = ["hatchling"]

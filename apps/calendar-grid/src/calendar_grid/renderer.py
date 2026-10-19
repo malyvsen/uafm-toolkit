@@ -1,7 +1,7 @@
 """Turn a week's events into a Pillow image in the humanistic timetable style."""
 
 import re
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from functools import cache
 from pathlib import Path
 
@@ -33,6 +33,26 @@ SUBJECT_SIZE = 24
 META_SIZE = 21
 LEGEND_SIZE = 24
 LONG_BLOCK_MINUTES = 120
+
+# Header geometry mirrors _draw_header: title line, gap, subtitle line,
+# then day labels and gaps before the grid. Fixed offsets keep renders stable.
+TITLE_H = 76
+TITLE_GAP = 8
+SUBTITLE_H = 40
+DAY_LABEL_H = 30
+DAY_LABEL_GAP = 36
+GRID_GAP = 12
+
+# Class-block geometry: inset from the column edge, thick spine on the left,
+# then text with a right inset. Text lines use 6pt leading.
+BLOCK_PAD_X = 5
+SPINE_W = 8
+TEXT_GAP = 12
+TEXT_PAD_RIGHT = 6
+BLOCK_PAD_Y = 10
+SUBJECT_STEP = 30
+META_STEP = 27
+LINE_SLACK = 8
 
 DAY_NAMES = [
     "Poniedziałek",
@@ -78,13 +98,21 @@ def render_week(events: list[Event]) -> Image.Image:
     """Render events from one Monday-to-Sunday week as a PNG-ready image."""
     if not events:
         raise ValueError("Cannot render a week with no events")
-    monday = min(e.date for e in events)
-    monday -= timedelta(days=monday.weekday())
+    first = min(e.date for e in events)
+    monday = first - timedelta(days=first.weekday())
     weekend = any(e.date.weekday() >= 5 for e in events)
     days = [monday + timedelta(days=i) for i in range(7 if weekend else 5)]
 
     width = MARGIN_X + AXIS_W + len(days) * COL_W + MARGIN_X
-    grid_top = MARGIN_TOP + 76 + 8 + 40 + 30 + 36 + 12
+    grid_top = (
+        MARGIN_TOP
+        + TITLE_H
+        + TITLE_GAP
+        + SUBTITLE_H
+        + DAY_LABEL_H
+        + DAY_LABEL_GAP
+        + GRID_GAP
+    )
     height = grid_top + (END_HOUR - START_HOUR) * HOUR_H + MARGIN_BOTTOM
 
     image = Image.new("RGB", (width, height), CREAM)
@@ -173,7 +201,7 @@ def _draw_grid(draw: ImageDraw.ImageDraw, days: list[date], grid_top: int) -> No
         if i > 0:
             draw.line([(x, grid_top), (x, bottom)], fill=INK, width=2)
         draw.text(
-            (x + COL_W / 2, grid_top - 12 - 18),
+            (x + COL_W / 2, grid_top - DAY_LABEL_H),
             f"{DAY_NAMES[day.weekday()]}, {day.day}.{day.month:02d}",
             font=day_font,
             fill=INK,
@@ -186,66 +214,72 @@ def _draw_event(
     draw: ImageDraw.ImageDraw, event: Event, days: list[date], grid_top: int
 ) -> None:
     col = (event.date - days[0]).days
-    top = grid_top + _minutes_since_start(event) * HOUR_H / 60
-    bottom = grid_top + _minutes_until_end(event) * HOUR_H / 60
-    x = MARGIN_X + AXIS_W + col * COL_W + 5
-    box = [x, top, x + COL_W - 10, bottom]
-    _, color = FORM_STYLES.get(event.form, (event.form, INK))
-    dark = event.form not in FORM_STYLES
+    top = grid_top + _offset_minutes(event.start) * HOUR_H / 60
+    bottom = grid_top + _offset_minutes(event.end) * HOUR_H / 60
+    x = MARGIN_X + AXIS_W + col * COL_W + BLOCK_PAD_X
+    box = [x, top, x + COL_W - 2 * BLOCK_PAD_X, bottom]
+    style = FORM_STYLES.get(event.form)
+    color = style[1] if style else INK
+    dark = style is None
     draw.rectangle(box, fill=color, outline=INK, width=2)
-    draw.rectangle([x, top, x + 8, bottom], fill=CREAM if dark else INK)
+    draw.rectangle([x, top, x + SPINE_W, bottom], fill=CREAM if dark else INK)
 
-    text_w = COL_W - 10 - 8 - 18
-    long = (event.end.hour * 60 + event.end.minute) - (
-        event.start.hour * 60 + event.start.minute
-    ) >= LONG_BLOCK_MINUTES
+    text_w = COL_W - 2 * BLOCK_PAD_X - SPINE_W - TEXT_GAP - TEXT_PAD_RIGHT
+    long = _duration_minutes(event) >= LONG_BLOCK_MINUTES
     time_range = f"{event.start.hour}:{event.start.minute:02d}–{event.end.hour}:{event.end.minute:02d}"
     room = format_room(event.room)
     subject_font = _font("bold", SUBJECT_SIZE)
     meta_font = _font("italic", META_SIZE)
     if long:
         lines = [
-            (l, subject_font, 30)
+            (l, subject_font, SUBJECT_STEP)
             for l in _wrap(event.subject, subject_font, text_w, 2, draw)
         ]
-        lines.append((time_range, meta_font, 27))
+        lines.append((time_range, meta_font, META_STEP))
         if room:
-            lines.append((room, meta_font, 27))
+            lines.append((room, meta_font, META_STEP))
     else:
         lines = [
-            (l, subject_font, 30)
+            (l, subject_font, SUBJECT_STEP)
             for l in _wrap(event.subject, subject_font, text_w, 1, draw)
         ]
         meta = time_range if not room else f"{time_range} · {room}"
-        lines.append((_truncate(meta, meta_font, text_w, draw), meta_font, 27))
+        lines.append((_truncate(meta, meta_font, text_w, draw), meta_font, META_STEP))
 
-    available = bottom - top - 20
-    y = top + 10
+    y = top + BLOCK_PAD_Y
     for text, font, step in lines:
-        if y + step - 8 > top + available + 10:
+        if y + step - LINE_SLACK > bottom - BLOCK_PAD_Y:
             break
-        draw.text((x + 8 + 12, y), text, font=font, fill=CREAM if dark else INK)
+        draw.text(
+            (x + SPINE_W + TEXT_GAP, y), text, font=font, fill=CREAM if dark else INK
+        )
         y += step
 
 
-def _minutes_since_start(event: Event) -> float:
-    return (event.start.hour - START_HOUR) * 60 + event.start.minute
+def _offset_minutes(moment: time) -> float:
+    return (moment.hour - START_HOUR) * 60 + moment.minute
 
 
-def _minutes_until_end(event: Event) -> float:
-    return (event.end.hour - START_HOUR) * 60 + event.end.minute
+def _duration_minutes(event: Event) -> float:
+    return _offset_minutes(event.end) - _offset_minutes(event.start)
 
 
 def format_room(raw: str) -> str:
     """Shorten a raw room cell (`bud.D D - 02 - SALA BALETOWA`) for display."""
-    code, sep, descriptor = raw.rpartition(" - ")
-    code = _BUILDING_RE.sub("", code if sep else raw)
-    code = re.sub(r"-\s+", "-", code).strip()
+    if " - " not in raw:
+        return f"sala {_clean_code(raw)}"
+    code, _, descriptor = raw.rpartition(" - ")
+    code = _clean_code(code)
     words = [w for w in descriptor.split() if w not in _GENERIC_ROOM_WORDS]
     detail = " ".join(words).lower()
     if "-" in code and detail:
         return f"sala {code} · {detail}"
     return f"sala {code}"
+
+
+def _clean_code(code: str) -> str:
+    code = _BUILDING_RE.sub("", code)
+    return re.sub(r"-\s+", "-", code).strip()
 
 
 def _wrap(

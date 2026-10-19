@@ -20,21 +20,21 @@ class CalendarError(Exception):
 
 
 @app.default
-def calendar_grid(
+def main(
     pdf: Path,
     output: Annotated[Path, cyclopts.Parameter(alias="-o")],
     week: Annotated[str | None, cyclopts.Parameter(name="--week")] = None,
 ) -> None:
     """Render PDF's week (optionally chosen with --week, a Monday) into output PNG."""
     try:
-        saved = run(pdf, output, week)
+        saved = render_pdf_week(pdf, output, week)
     except CalendarError as exc:
         print(exc, file=sys.stderr)
         raise SystemExit(1) from exc
     print(f"Zapisano {saved}")
 
 
-def run(pdf: Path, output: Path, week: str | None) -> Path:
+def render_pdf_week(pdf: Path, output: Path, week: str | None) -> Path:
     """Resolve the week, render it, save the PNG, and return the saved path."""
     if not pdf.exists():
         raise CalendarError(f"Nie znaleziono pliku: {pdf}.")
@@ -63,14 +63,11 @@ def run(pdf: Path, output: Path, week: str | None) -> Path:
             f"Brak zajęć w tygodniu {week}. Dostępne poniedziałki: {', '.join(mondays)}."
         ) from None
     except ValueError:
+        # The date format was validated above, so only a non-Monday lands here.
         raise CalendarError(
-            f"Tydzień musi zaczynać się w poniedziałek. "
+            "Tydzień musi zaczynać się w poniedziałek. "
             f"Dostępne poniedziałki: {', '.join(mondays)}."
         ) from None
     output.parent.mkdir(parents=True, exist_ok=True)
     render_week(selected).save(output)
     return output
-
-
-def main() -> None:
-    app()
