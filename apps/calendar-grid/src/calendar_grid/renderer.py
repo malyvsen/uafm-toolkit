@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import date, time, timedelta
 from functools import cache
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Literal
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
@@ -103,6 +103,11 @@ FORM_STYLES = {
     "Wyk": ("Wykład", WYK_ORANGE),
     "Kon": ("Konwersatorium", KON_PINK),
 }
+
+LineKind = Literal["subject", "meta"]
+BlockLine = tuple[str, LineKind]
+BlockMeasure = Callable[[str, LineKind], float]
+WidthMeasure = Callable[[str], float]
 
 _FONT_DIR = Path("/System/Library/Fonts/Supplemental")
 _FONT_FILES = {
@@ -337,32 +342,22 @@ def _draw_event(
     subject_font = _font("bold", SUBJECT_SIZE)
     meta_font = _font("italic", META_SIZE)
 
-    def measure(text: str, kind: Literal["subject", "meta"]) -> float:
+    def measure(text: str, kind: LineKind) -> float:
         return draw.textlength(
             text, font=subject_font if kind == "subject" else meta_font
         )
 
-    lines = layout_block(
-        event.subject,
-        time_range,
-        room,
-        text_w,
-        block_h,
-        measure,
-    )
-    fonts = {"subject": subject_font, "meta": meta_font}
-    steps = {"subject": SUBJECT_STEP, "meta": META_STEP}
-    fills = {"subject": OFF_WHITE, "meta": SOFT_GREY}
+    lines = layout_block(event.subject, time_range, room, text_w, block_h, measure)
 
     y = top + BLOCK_PAD_Y
     for text, kind in lines:
         draw.text(
             (x + SPINE_W + TEXT_GAP, y),
             text,
-            font=fonts[kind],
-            fill=fills[kind],
+            font=subject_font if kind == "subject" else meta_font,
+            fill=OFF_WHITE if kind == "subject" else SOFT_GREY,
         )
-        y += steps[kind]
+        y += _line_step(kind)
 
 
 def layout_block(
@@ -371,62 +366,53 @@ def layout_block(
     room: str,
     text_w: float,
     block_h: float,
-    measure: Callable[[str, Literal["subject", "meta"]], float],
-) -> list[tuple[str, Literal["subject", "meta"]]]:
-    subject_marker = cast(Any, "subject")
-    meta_marker = cast(Any, "meta")
+    measure: BlockMeasure,
+) -> list[BlockLine]:
+    def subject_width(text: str) -> float:
+        return measure(text, "subject")
 
-    class _MeasureDraw:
-        def textlength(self, text: str, font: Any = None, **_kwargs: Any) -> float:
-            kind: Literal["subject", "meta"] = (
-                "subject" if font is subject_marker else "meta"
-            )
-            return measure(text, kind)
+    def meta_width(text: str) -> float:
+        return measure(text, "meta")
 
-    shim = cast(Any, _MeasureDraw())
-    subj_1: list[tuple[str, Literal["subject", "meta"]]] = [
-        (line, "subject") for line in _wrap(subject, subject_marker, text_w, 1, shim)
+    subj_1: list[BlockLine] = [
+        (line, "subject") for line in _wrap(subject, text_w, 1, subject_width)
     ]
-    subj_2: list[tuple[str, Literal["subject", "meta"]]] = [
-        (line, "subject") for line in _wrap(subject, subject_marker, text_w, 2, shim)
+    subj_2: list[BlockLine] = [
+        (line, "subject") for line in _wrap(subject, text_w, 2, subject_width)
     ]
-    time_line = _truncate(time_range, meta_marker, text_w, shim)
-    room_line = _truncate(room, meta_marker, text_w, shim) if room else ""
+    time_line = _truncate(time_range, text_w, meta_width)
+    room_line = _truncate(room, text_w, meta_width) if room else ""
     combined_line = _truncate(
-        f"{time_range} · {room}" if room else time_range,
-        meta_marker,
-        text_w,
-        shim,
+        f"{time_range} · {room}" if room else time_range, text_w, meta_width
     )
 
-    def fits(lines: list[tuple[str, Literal["subject", "meta"]]]) -> bool:
+    def fits(lines: list[BlockLine]) -> bool:
         y = BLOCK_PAD_Y
         for _, kind in lines:
-            step = SUBJECT_STEP if kind == "subject" else META_STEP
+            step = _line_step(kind)
             if y + step - LINE_SLACK > block_h - BLOCK_PAD_Y:
                 return False
             y += step
         return True
 
-    candidates: list[list[tuple[str, Literal["subject", "meta"]]]] = []
-    if room:
-        candidates.append([*subj_2, (time_line, "meta"), (room_line, "meta")])
-        candidates.append([*subj_1, (time_line, "meta"), (room_line, "meta")])
-    else:
-        candidates.append([*subj_2, (time_line, "meta")])
-        candidates.append([*subj_1, (time_line, "meta")])
-    candidates.append([*subj_2, (combined_line, "meta")])
-    candidates.append([*subj_1, (combined_line, "meta")])
-    candidates.append([*subj_1])
+    # Separate time/room beats a combined line; a truncated subject beats
+    # combined or dropped metadata. The second subject line is only the
+    # wraparound continuation, so it vanishes when the subject fits in one.
+    subject_options = [subj_2, subj_1] if subj_2 != subj_1 else [subj_1]
+    separate: list[BlockLine] = [(time_line, "meta"), (room_line, "meta")]
+    meta_options: list[list[BlockLine]] = (
+        [separate, [(combined_line, "meta")]] if room else [[(time_line, "meta")]]
+    )
+    for meta in meta_options:
+        for subj in subject_options:
+            candidate = [*subj, *meta]
+            if fits(candidate):
+                return candidate
+    return subj_1 if fits(subj_1) else []
 
-    seen: list[list[tuple[str, Literal["subject", "meta"]]]] = []
-    for candidate in candidates:
-        if candidate in seen:
-            continue
-        seen.append(candidate)
-        if fits(candidate):
-            return candidate
-    return []
+
+def _line_step(kind: LineKind) -> int:
+    return SUBJECT_STEP if kind == "subject" else META_STEP
 
 
 def _offset_minutes(moment: time) -> float:
@@ -452,31 +438,25 @@ def _clean_code(code: str) -> str:
 
 
 def _wrap(
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    max_width: float,
-    lines: int,
-    draw: ImageDraw.ImageDraw,
+    text: str, max_width: float, max_lines: int, measure: WidthMeasure
 ) -> list[str]:
     out: list[str] = []
     for word in text.split():
-        if out and draw.textlength(out[-1] + " " + word, font=font) <= max_width:
+        if out and measure(out[-1] + " " + word) <= max_width:
             out[-1] += " " + word
-        elif len(out) < lines:
+        elif len(out) < max_lines:
             out.append(word)
         else:
             out[-1] += " " + word
     if out:
-        out[-1] = _truncate(out[-1], font, max_width, draw)
+        out[-1] = _truncate(out[-1], max_width, measure)
     return out
 
 
-def _truncate(
-    text: str, font: ImageFont.FreeTypeFont, max_width: float, draw: ImageDraw.ImageDraw
-) -> str:
-    if draw.textlength(text, font=font) <= max_width:
+def _truncate(text: str, max_width: float, measure: WidthMeasure) -> str:
+    if measure(text) <= max_width:
         return text
-    while text and draw.textlength(text + "…", font=font) > max_width:
+    while text and measure(text + "…") > max_width:
         text = text[:-1]
     return text + "…"
 

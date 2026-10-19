@@ -2,7 +2,6 @@
 
 from datetime import date, time, timedelta
 from pathlib import Path
-from typing import Literal
 
 import pytest
 from PIL import Image, ImageStat
@@ -25,6 +24,8 @@ from calendar_grid.renderer import (
     UNKNOWN_SPINE,
     WAR_YELLOW,
     WYK_ORANGE,
+    BlockLine,
+    LineKind,
     apply_grain,
     format_room,
     layout_block,
@@ -160,18 +161,20 @@ def test_grain_raises_variance_on_background_patch():
     assert grained_std > bare_std
 
 
-def _fake_measure(text: str, kind: Literal["subject", "meta"]) -> float:
+def _fake_measure(text: str, kind: LineKind) -> float:
     return float(len(text) * (10 if kind == "subject" else 8))
 
 
-def _block_h(minutes: float) -> float:
-    return minutes * HOUR_H / 60
+def _layout(
+    subject: str, time_range: str, room: str, text_w: float, minutes: float
+) -> list[BlockLine]:
+    return layout_block(
+        subject, time_range, room, text_w, minutes * HOUR_H / 60, _fake_measure
+    )
 
 
 def test_short_subject_uses_separate_meta():
-    lines = layout_block(
-        "Wymowa", "10:00–11:30", "sala D 319", 200, _block_h(145), _fake_measure
-    )
+    lines = _layout("Wymowa", "10:00–11:30", "sala D 319", 200, 145)
     assert [kind for _, kind in lines] == ["subject", "meta", "meta"]
     assert lines[0][0] == "Wymowa"
     assert lines[1][0] == "10:00–11:30"
@@ -179,13 +182,8 @@ def test_short_subject_uses_separate_meta():
 
 
 def test_long_subject_wraps_to_two_lines_with_separate_meta():
-    lines = layout_block(
-        "Elementarne zadania aktorskie",
-        "10:00–12:25",
-        "sala D 319",
-        150,
-        _block_h(145),
-        _fake_measure,
+    lines = _layout(
+        "Elementarne zadania aktorskie", "10:00–12:25", "sala D 319", 150, 145
     )
     kinds = [kind for _, kind in lines]
     assert kinds == ["subject", "subject", "meta", "meta"]
@@ -194,42 +192,32 @@ def test_long_subject_wraps_to_two_lines_with_separate_meta():
     assert lines[3][0] == "sala D 319"
 
 
-def test_95min_block_uses_separate_meta():
-    lines = layout_block(
-        "Wymowa", "10:00–11:35", "sala D 319", 200, _block_h(95), _fake_measure
-    )
+def test_medium_block_keeps_separate_meta():
+    # Fitting is purely visual: a 95-minute block still separates time and
+    # room when the lines fit.
+    lines = _layout("Wymowa", "10:00–11:35", "sala D 319", 200, 95)
     assert [kind for _, kind in lines] == ["subject", "meta", "meta"]
 
 
 def test_tight_block_falls_back_to_combined_meta():
-    lines = layout_block(
-        "Elementarne zadania aktorskie",
-        "10:00–10:45",
-        "sala D 319",
-        150,
-        _block_h(45),
-        _fake_measure,
+    lines = _layout(
+        "Elementarne zadania aktorskie", "10:00–10:45", "sala D 319", 150, 45
     )
     assert [kind for _, kind in lines] == ["subject", "meta"]
     assert "·" in lines[1][0]
 
 
-def test_tiny_block_renders_empty_without_crashing():
-    lines = layout_block(
-        "Wymowa", "10:00–10:20", "sala D 319", 200, _block_h(20), _fake_measure
-    )
-    assert lines == []
+def test_tiny_block_yields_no_lines():
+    assert _layout("Wymowa", "10:00–10:20", "sala D 319", 200, 20) == []
 
 
 def test_subject_only_when_meta_does_not_fit():
-    lines = layout_block(
-        "Wymowa", "10:00–10:30", "sala D 319", 200, _block_h(30), _fake_measure
-    )
+    lines = _layout("Wymowa", "10:00–10:30", "sala D 319", 200, 30)
     assert [kind for _, kind in lines] == ["subject"]
 
 
 def test_empty_room_renders_time_only():
-    lines = layout_block("Wymowa", "10:00–11:30", "", 200, _block_h(145), _fake_measure)
+    lines = _layout("Wymowa", "10:00–11:30", "", 200, 145)
     assert [kind for _, kind in lines] == ["subject", "meta"]
     assert lines[1][0] == "10:00–11:30"
 
