@@ -15,6 +15,7 @@ from calendar_grid.renderer import (
     GRID_GAP,
     GUTTER,
     HOUR_H,
+    LEGEND_SPINE_W,
     MARGIN_TOP,
     START_HOUR,
     SUBTITLE_H,
@@ -199,6 +200,55 @@ def test_hour_lines_break_at_gutters_and_blocks(week_19: list[Event]):
     assert free_edge > covered_edge + 20
 
 
+def test_legend_bars_share_one_x_and_stack(week_19: list[Event]):
+    image = render_week(week_19)
+    grid_top = _grid_top()
+    war_left, war_right, war_top, _ = _legend_bar_bounds(image, WAR_YELLOW, grid_top)
+    wyk_left, wyk_right, _, _ = _legend_bar_bounds(image, WYK_ORANGE, grid_top)
+    assert war_left == wyk_left
+    assert war_right - war_left == LEGEND_SPINE_W
+    assert wyk_right - wyk_left == LEGEND_SPINE_W
+    wyk_top = _legend_bar_bounds(image, WYK_ORANGE, grid_top)[2]
+    assert war_top < wyk_top
+
+
+def test_legend_is_bare_not_frosted(week_19: list[Event]):
+    image = render_week(week_19)
+    grid_top = _grid_top()
+    bar_left, _, _, bar_top = _legend_bar_bounds(image, WAR_YELLOW, grid_top)[:4]
+    # Mid-bar y keeps clear of text; gap xs sit between the spine and the label.
+    _, _, _, bar_bottom = _legend_bar_bounds(image, WAR_YELLOW, grid_top)
+    y = (bar_top + bar_bottom) // 2
+    gap_xs = list(
+        range(bar_left + LEGEND_SPINE_W + 2, bar_left + LEGEND_SPINE_W + 10, 2)
+    )
+    rendered = _avg_pixel_sum(image, gap_xs, y)
+    bare = background_for_week(date(2026, 10, 19), *image.size)
+    expected = _avg_pixel_sum(bare, gap_xs, y)
+    assert abs(rendered - expected) < 15
+
+
+def test_legend_unknown_form_fallback(week_19: list[Event]):
+    base = week_19[0]
+    event = Event(
+        date=base.date,
+        start=base.start,
+        end=base.end,
+        duration=base.duration,
+        subject=base.subject,
+        form="Ćw",
+        groups=base.groups,
+        room=base.room,
+        lecturer=base.lecturer,
+        credit_form=base.credit_form,
+        tracks=base.tracks,
+        notes=base.notes,
+    )
+    image = render_week([event])
+    left, right, _, _ = _legend_bar_bounds(image, UNKNOWN_SPINE, _grid_top())
+    assert right - left == LEGEND_SPINE_W
+
+
 def test_grain_is_deterministic():
     bare = background_for_week(date(2026, 10, 19), 800, 600)
     seed = date(2026, 10, 19).toordinal()
@@ -330,3 +380,23 @@ def _avg_pixel_sum(image: Image.Image, xs: list[int], y: int) -> float:
         assert isinstance(pixel, tuple)
         total += sum(pixel[:3])
     return total / len(xs)
+
+
+def _legend_bar_bounds(
+    image: Image.Image, color: tuple[int, ...], grid_top: int
+) -> tuple[int, int, int, int]:
+    matches: list[tuple[int, int]] = []
+    for y in range(MARGIN_TOP, grid_top):
+        for x in range(image.width - 500, image.width - 10):
+            pixel = image.getpixel((x, y))
+            assert isinstance(pixel, tuple)
+            if _close(pixel, color):
+                matches.append((x, y))
+    assert matches, "no legend bar found"
+    from collections import Counter
+
+    counts = Counter(x for x, _ in matches)
+    dense = {x for x, count in counts.items() if count >= 15}
+    assert dense, "no dense legend bar found"
+    ys = [y for x, y in matches if x in dense]
+    return min(dense), max(dense), min(ys), max(ys)

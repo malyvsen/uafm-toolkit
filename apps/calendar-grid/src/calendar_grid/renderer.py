@@ -60,11 +60,9 @@ SUBJECT_STEP = 30
 META_STEP = 27
 LINE_SLACK = 8
 
-# Frosted glass: blur and white overlay per surface, plus corner radii.
-# Event blocks use a slightly stronger frost than the shell.
+# Frosted glass for event blocks: blur and white overlay, plus corner radius.
 EVENT_WHITE_ALPHA = 32
 EVENT_RADIUS = 12
-CHIP_RADIUS = 6
 LEGEND_SPINE_W = 7
 
 DAY_NAMES = [
@@ -140,7 +138,7 @@ def render_week(events: list[Event]) -> Image.Image:
 
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    _draw_header(base, draw, width, monday, days[-1], events)
+    _draw_header(draw, width, monday, days[-1], events)
     _draw_grid(draw, days, grid_top, events)
     for event in sorted(events, key=lambda e: (e.date, e.start)):
         _draw_event(base, draw, event, days, grid_top)
@@ -218,7 +216,6 @@ def _frost(
 
 
 def _draw_header(
-    base: Image.Image,
     draw: ImageDraw.ImageDraw,
     width: int,
     monday: date,
@@ -232,7 +229,7 @@ def _draw_header(
     subtitle_top = MARGIN_TOP + TITLE_H + TITLE_GAP
     draw.text((MARGIN_X, subtitle_top), subtitle, font=subtitle_font, fill=SOFT_GREY)
     bottom = draw.textbbox((MARGIN_X, subtitle_top), subtitle, font=subtitle_font)[3]
-    _draw_legend(base, draw, width, bottom, events)
+    _draw_legend(draw, width, bottom, events)
 
 
 def _week_range(monday: date, last: date) -> str:
@@ -250,7 +247,6 @@ def _week_range(monday: date, last: date) -> str:
 
 
 def _draw_legend(
-    base: Image.Image,
     draw: ImageDraw.ImageDraw,
     width: int,
     subtitle_bottom: float,
@@ -260,28 +256,20 @@ def _draw_legend(
     ordered = [f for f in ("War", "Wyk", "Kon") if f in forms]
     # Unknown non-empty forms keep their code as the label; an empty form has no label to show.
     ordered += sorted({f for f in forms if f and f not in FORM_STYLES})
+    if not ordered:
+        return
     font = _font("regular", LEGEND_SIZE)
-    chip_w, chip_h, gap = 36, 28, 12
+    labels = [FORM_STYLES.get(form, (form, UNKNOWN_SPINE))[0] for form in ordered]
+    longest = max(draw.textlength(label, font=font) for label in labels)
+    block_x = width - MARGIN_X - LEGEND_SPINE_W - 12 - longest
+    chip_h, gap = 28, 12
     total_h = len(ordered) * (chip_h + gap) - gap
     y = subtitle_bottom - total_h
-    for form in ordered:
-        label, color = FORM_STYLES.get(form, (form, UNKNOWN_SPINE))
-        x = width - MARGIN_X - chip_w - 12 - draw.textlength(label, font=font)
-        _frost(
-            base,
-            (int(x), int(y), int(x + chip_w), int(y + chip_h)),
-            white_alpha=EVENT_WHITE_ALPHA,
-            corner_radius=CHIP_RADIUS,
-        )
-        draw.rounded_rectangle(
-            [x, y, x + chip_w, y + chip_h],
-            radius=CHIP_RADIUS,
-            outline=EVENT_BORDER,
-            width=1,
-        )
-        draw.rectangle([x, y, x + LEGEND_SPINE_W, y + chip_h], fill=color)
+    for form, label in zip(ordered, labels):
+        color = FORM_STYLES.get(form, (form, UNKNOWN_SPINE))[1]
+        draw.rectangle([block_x, y, block_x + LEGEND_SPINE_W, y + chip_h], fill=color)
         draw.text(
-            (x + chip_w + 12, y + chip_h / 2),
+            (block_x + LEGEND_SPINE_W + 12, y + chip_h / 2),
             label,
             font=font,
             fill=OFF_WHITE,
