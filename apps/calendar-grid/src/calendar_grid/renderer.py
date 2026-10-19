@@ -62,7 +62,9 @@ SUBJECT_STEP = 30
 META_STEP = 27
 LINE_SLACK = 8
 
-# Frosted grid shell: padding around the timetable area and corner radius.
+# Frosted glass: blur and white overlay per surface, plus corner radii.
+SHELL_BLUR_RADIUS = 14
+SHELL_WHITE_ALPHA = 26
 SHELL_PAD = 18
 SHELL_RADIUS = 18
 
@@ -70,6 +72,7 @@ SHELL_RADIUS = 18
 EVENT_WHITE_ALPHA = 32
 EVENT_RADIUS = 12
 CHIP_RADIUS = 6
+LEGEND_SPINE_W = 7
 
 DAY_NAMES = [
     "Poniedziałek",
@@ -133,6 +136,8 @@ def render_week(events: list[Event]) -> Image.Image:
     grid_bottom = grid_top + (END_HOUR - START_HOUR) * HOUR_H
     height = grid_bottom + MARGIN_BOTTOM
 
+    # Two layers: `base` holds the background with frosted glass melted into it,
+    # `overlay` holds lines, borders and text. They composite at the end.
     base = background_for_week(monday, width, height).convert("RGBA")
     shell_box = (
         MARGIN_X,
@@ -173,8 +178,8 @@ def apply_grain(
 def _frost(
     base: Image.Image,
     box: tuple[int, int, int, int],
-    radius: int = 14,
-    white_alpha: int = 26,
+    blur_radius: int = SHELL_BLUR_RADIUS,
+    white_alpha: int = SHELL_WHITE_ALPHA,
     corner_radius: int = SHELL_RADIUS,
 ) -> None:
     """Frost a rounded rect of the background in place with blur + white."""
@@ -183,7 +188,7 @@ def _frost(
     if width <= 0 or height <= 0:
         return
     region = base.crop((left, top, right, bottom)).filter(
-        ImageFilter.GaussianBlur(radius)
+        ImageFilter.GaussianBlur(blur_radius)
     )
     white = Image.new("RGBA", (width, height), (255, 255, 255, white_alpha))
     frosted = Image.alpha_composite(region.convert("RGBA"), white)
@@ -206,7 +211,7 @@ def _draw_header(
     subtitle_font = _font("regular", SUBTITLE_SIZE)
     draw.text((MARGIN_X, MARGIN_TOP), "Plan zajęć", font=title, fill=OFF_WHITE)
     subtitle = _week_range(monday, last)
-    subtitle_top = MARGIN_TOP + 76 + 8
+    subtitle_top = MARGIN_TOP + TITLE_H + TITLE_GAP
     draw.text((MARGIN_X, subtitle_top), subtitle, font=subtitle_font, fill=SOFT_GREY)
     bottom = draw.textbbox((MARGIN_X, subtitle_top), subtitle, font=subtitle_font)[3]
     _draw_legend(base, draw, width, bottom, events)
@@ -256,7 +261,7 @@ def _draw_legend(
             outline=EVENT_BORDER,
             width=1,
         )
-        draw.rectangle([x, y, x + 7, y + chip_h], fill=color)
+        draw.rectangle([x, y, x + LEGEND_SPINE_W, y + chip_h], fill=color)
         draw.text(
             (x + chip_w + 12, y + chip_h / 2),
             label,
@@ -312,12 +317,12 @@ def _draw_event(
     top = grid_top + _offset_minutes(event.start) * HOUR_H / 60
     bottom = grid_top + _offset_minutes(event.end) * HOUR_H / 60
     x = MARGIN_X + AXIS_W + col * COL_W + BLOCK_PAD_X
-    box = [x, top, x + COL_W - 2 * BLOCK_PAD_X, bottom]
+    box = (x, top, x + COL_W - 2 * BLOCK_PAD_X, bottom)
     style = FORM_STYLES.get(event.form)
     spine_color = style[1] if style else UNKNOWN_SPINE
     _frost(
         base,
-        (int(x), int(top), int(x + COL_W - 2 * BLOCK_PAD_X), int(bottom)),
+        (int(box[0]), int(box[1]), int(box[2]), int(box[3])),
         white_alpha=EVENT_WHITE_ALPHA,
         corner_radius=EVENT_RADIUS,
     )

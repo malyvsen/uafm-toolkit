@@ -1,6 +1,6 @@
 """Renderer tests: pure event list in, Pillow image out."""
 
-from datetime import date, time
+from datetime import date, time, timedelta
 from pathlib import Path
 
 import pytest
@@ -8,7 +8,19 @@ from PIL import Image, ImageStat
 
 from calendar_grid.background import background_for_week
 from calendar_grid.renderer import (
+    AXIS_W,
+    BLOCK_PAD_X,
     COL_W,
+    DAY_LABEL_GAP,
+    DAY_LABEL_H,
+    GRID_GAP,
+    HOUR_H,
+    MARGIN_TOP,
+    MARGIN_X,
+    START_HOUR,
+    SUBTITLE_H,
+    TITLE_GAP,
+    TITLE_H,
     UNKNOWN_SPINE,
     WAR_YELLOW,
     WYK_ORANGE,
@@ -81,19 +93,29 @@ def test_format_room(raw: str, expected: str):
     assert format_room(raw) == expected
 
 
+def test_render_rejects_empty_week():
+    with pytest.raises(ValueError):
+        render_week([])
+
+
 def test_block_spines_follow_class_form(week_19: list[Event]):
     image = render_week(week_19)
-    # 4px from the block left edge at the vertical center: Monday Warsztaty, Thursday Wykład.
-    monday_spine = image.getpixel((121, 537))
-    thursday_spine = image.getpixel((1021, 870))
-    assert isinstance(monday_spine, tuple) and _close(monday_spine, WAR_YELLOW)
-    assert isinstance(thursday_spine, tuple) and _close(thursday_spine, WYK_ORANGE)
+    monday = min(e.date for e in week_19)
+    first = min(week_19, key=lambda e: (e.date, e.start))
+    last = max(week_19, key=lambda e: (e.date, e.start))
+    first_spine = image.getpixel(_spine_pixel(first, monday))
+    last_spine = image.getpixel(_spine_pixel(last, monday))
+    assert isinstance(first_spine, tuple) and _close(first_spine, WAR_YELLOW)
+    assert isinstance(last_spine, tuple) and _close(last_spine, WYK_ORANGE)
 
 
 def test_block_interiors_are_frosted_not_solid(week_19: list[Event]):
     image = render_week(week_19)
-    interior = image.getpixel((262, 643))
-    bare = background_for_week(date(2026, 10, 19), *image.size).getpixel((262, 643))
+    monday = min(e.date for e in week_19)
+    first = min(week_19, key=lambda e: (e.date, e.start))
+    pixel = _interior_pixel(first, monday)
+    interior = image.getpixel(pixel)
+    bare = background_for_week(date(2026, 10, 19), *image.size).getpixel(pixel)
     assert isinstance(interior, tuple) and isinstance(bare, tuple)
     assert interior != WAR_YELLOW
     assert sum(interior) > sum(bare)
@@ -116,32 +138,69 @@ def test_unknown_form_renders_light_spine(week_19: list[Event]):
         notes=base.notes,
     )
     image = render_week([event])
-    spine = image.getpixel((121, 537))
+    monday = event.date - timedelta(days=event.date.weekday())
+    spine = image.getpixel(_spine_pixel(event, monday))
     assert isinstance(spine, tuple) and _close(spine, UNKNOWN_SPINE)
 
 
-def test_grain_is_deterministic(week_19: list[Event]):
-    image = render_week(week_19)
-    grained = apply_grain(image, date(2026, 10, 19).toordinal())
-    regrained = apply_grain(image, date(2026, 10, 19).toordinal())
-    assert grained.tobytes() == regrained.tobytes()
+def test_grain_is_deterministic():
+    bare = background_for_week(date(2026, 10, 19), 800, 600)
+    seed = date(2026, 10, 19).toordinal()
+    assert apply_grain(bare, seed).tobytes() == apply_grain(bare, seed).tobytes()
 
 
-def test_grain_raises_variance_on_background_patch(week_19: list[Event]):
-    image = render_week(week_19)
-    bare = background_for_week(date(2026, 10, 19), *image.size)
+def test_grain_raises_variance_on_background_patch():
+    bare = background_for_week(date(2026, 10, 19), 800, 600)
+    grained = apply_grain(bare, date(2026, 10, 19).toordinal())
     patch = (8, 8, 40, 40)
-    grained_std = sum(ImageStat.Stat(image.crop(patch)).stddev)
+    grained_std = sum(ImageStat.Stat(grained.crop(patch)).stddev)
     bare_std = sum(ImageStat.Stat(bare.crop(patch)).stddev)
     assert grained_std > bare_std
+
+
+def _grid_top() -> int:
+    return (
+        MARGIN_TOP
+        + TITLE_H
+        + TITLE_GAP
+        + SUBTITLE_H
+        + DAY_LABEL_H
+        + DAY_LABEL_GAP
+        + GRID_GAP
+    )
+
+
+def _block_top_bottom(event: Event) -> tuple[float, float]:
+    top = _grid_top() + _minutes(event.start) * HOUR_H / 60
+    bottom = _grid_top() + _minutes(event.end) * HOUR_H / 60
+    return top, bottom
+
+
+def _minutes(moment: time) -> float:
+    return (moment.hour - START_HOUR) * 60 + moment.minute
+
+
+def _block_left(event: Event, monday: date) -> int:
+    col = (event.date - monday).days
+    return MARGIN_X + AXIS_W + col * COL_W + BLOCK_PAD_X
+
+
+def _spine_pixel(event: Event, monday: date) -> tuple[int, int]:
+    # 4px from the block left edge at the block vertical center.
+    top, bottom = _block_top_bottom(event)
+    return int(_block_left(event, monday) + 4), int((top + bottom) / 2)
+
+
+def _interior_pixel(event: Event, monday: date) -> tuple[int, int]:
+    # Block horizontal center near the bottom edge, clear of text.
+    _, bottom = _block_top_bottom(event)
+    return (
+        int(_block_left(event, monday) + (COL_W - 2 * BLOCK_PAD_X) // 2),
+        int(bottom - 15),
+    )
 
 
 def _close(
     actual: tuple[int, ...], expected: tuple[int, ...], tolerance: int = 8
 ) -> bool:
     return all(abs(a - e) <= tolerance for a, e in zip(actual, expected))
-
-
-def test_render_rejects_empty_week():
-    with pytest.raises(ValueError):
-        render_week([])
