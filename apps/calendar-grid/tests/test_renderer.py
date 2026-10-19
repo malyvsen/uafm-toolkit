@@ -13,6 +13,7 @@ from calendar_grid.renderer import (
     DAY_LABEL_GAP,
     DAY_LABEL_H,
     GRID_GAP,
+    GUTTER,
     HOUR_H,
     MARGIN_TOP,
     START_HOUR,
@@ -27,6 +28,7 @@ from calendar_grid.renderer import (
     apply_grain,
     col_x,
     format_room,
+    hour_segments,
     layout_block,
     render_week,
 )
@@ -65,12 +67,12 @@ def test_render_is_valid_png_with_expected_dimensions(
 ):
     image = render_week(week_19)
     assert image.mode == "RGB"
-    assert image.size == (1648, 1698)
+    assert image.size == (1744, 1698)
     output = tmp_path / "week.png"
     image.save(output)
     with Image.open(output) as reopened:
         reopened.load()
-        assert reopened.size == (1648, 1698)
+        assert reopened.size == (1744, 1698)
 
 
 def test_render_is_deterministic(week_19: list[Event]):
@@ -80,7 +82,7 @@ def test_render_is_deterministic(week_19: list[Event]):
 def test_weekend_columns_appear_only_with_weekend_events(week_19: list[Event]):
     plain = render_week(week_19)
     with_weekend = render_week([*week_19, saturday_event(week_19[0])])
-    assert with_weekend.size == (plain.width + 2 * COL_W, plain.height)
+    assert with_weekend.size == (plain.width + 2 * (COL_W + GUTTER), plain.height)
 
 
 @pytest.mark.parametrize(
@@ -143,6 +145,58 @@ def test_unknown_form_renders_light_spine(week_19: list[Event]):
     monday = event.date - timedelta(days=event.date.weekday())
     spine = image.getpixel(_spine_pixel(event, monday))
     assert isinstance(spine, tuple) and _close(spine, UNKNOWN_SPINE)
+
+
+def test_hour_segments_omit_covered_hours():
+    monday = date(2026, 10, 19)
+    days = [monday + timedelta(days=i) for i in range(5)]
+    grid_top = _grid_top()
+    event = Event(
+        date=monday,
+        start=time(9, 40),
+        end=time(12, 5),
+        duration="",
+        subject="",
+        form="War",
+        groups="",
+        room="",
+        lecturer="",
+        credit_form="",
+        tracks="",
+        notes="",
+    )
+    segments = hour_segments(days, [event], grid_top)
+    by_hour: dict[int, list[int]] = {}
+    for x0, x1, y in segments:
+        assert x1 == x0 + COL_W
+        hour = START_HOUR + (y - grid_top) // HOUR_H
+        by_hour.setdefault(hour, []).append(x0)
+    assert col_x(0) in by_hour[9]
+    assert col_x(0) not in by_hour[10]
+    assert col_x(0) not in by_hour[11]
+    assert col_x(0) not in by_hour[12]
+    assert col_x(0) in by_hour[13]
+    assert col_x(1) in by_hour[10]
+
+
+def test_hour_lines_break_at_gutters_and_blocks(week_19: list[Event]):
+    image = render_week(week_19)
+    y10 = _grid_top() + (10 - START_HOUR) * HOUR_H
+    free_xs = list(range(col_x(1) + 20, col_x(1) + COL_W - 20, 10))
+    gutter_xs = list(range(col_x(0) + COL_W + 6, col_x(0) + COL_W + GUTTER - 6, 2))
+    free_avg = _avg_pixel_sum(image, free_xs, y10)
+    free_off = _avg_pixel_sum(image, free_xs, y10 + 10)
+    gutter_avg = _avg_pixel_sum(image, gutter_xs, y10)
+    gutter_off = _avg_pixel_sum(image, gutter_xs, y10 + 10)
+    assert free_avg > free_off + 15
+    assert free_avg > gutter_avg + 10
+    assert abs(gutter_avg - gutter_off) < 15
+    covered_edge = _avg_pixel_sum(
+        image, [col_x(0) + 1, col_x(0) + 2, col_x(0) + 3], y10
+    )
+    free_edge = _avg_pixel_sum(image, [col_x(1) + 1, col_x(1) + 2, col_x(1) + 3], y10)
+    assert abs(covered_edge - gutter_avg) < 25
+    assert free_edge > covered_edge + 20
 
 
 def test_grain_is_deterministic():
@@ -267,3 +321,12 @@ def _close(
     actual: tuple[int, ...], expected: tuple[int, ...], tolerance: int = 8
 ) -> bool:
     return all(abs(a - e) <= tolerance for a, e in zip(actual, expected))
+
+
+def _avg_pixel_sum(image: Image.Image, xs: list[int], y: int) -> float:
+    total = 0
+    for x in xs:
+        pixel = image.getpixel((x, y))
+        assert isinstance(pixel, tuple)
+        total += sum(pixel[:3])
+    return total / len(xs)

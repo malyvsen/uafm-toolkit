@@ -20,7 +20,7 @@ def test_single_week_needs_no_flag(tmp_path: Path):
     assert render_pdf_week(SINGLE, output, None) == output
     with Image.open(output) as image:
         image.load()
-        assert image.size == (1648, 1698)
+        assert image.size == (1744, 1698)
 
 
 def test_single_week_accepts_its_monday(tmp_path: Path):

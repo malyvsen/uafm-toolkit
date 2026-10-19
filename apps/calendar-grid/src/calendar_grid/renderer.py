@@ -16,11 +16,7 @@ from plan_parser import Event
 OFF_WHITE = (244, 245, 246)
 SOFT_GREY = (185, 192, 201)
 AXIS_LABEL = (244, 245, 246, 160)
-HOUR_LINE = (255, 255, 255, 28)
-TOP_RULE = (255, 255, 255, 70)
-DAY_DIVIDER = (255, 255, 255, 28)
-OUTER_BORDER = (255, 255, 255, 70)
-SHELL_BORDER = (255, 255, 255, 46)
+HOUR_LINE = (255, 255, 255, 14)
 EVENT_BORDER = (255, 255, 255, 90)
 UNKNOWN_SPINE = (154, 163, 175)
 WAR_YELLOW = (233, 202, 110)
@@ -31,6 +27,7 @@ START_HOUR = 8
 END_HOUR = 22
 HOUR_H = 100
 COL_W = 300
+GUTTER = 24
 AXIS_W = 76
 MARGIN_X = 36
 MARGIN_TOP = 48
@@ -64,11 +61,6 @@ META_STEP = 27
 LINE_SLACK = 8
 
 # Frosted glass: blur and white overlay per surface, plus corner radii.
-SHELL_BLUR_RADIUS = 14
-SHELL_WHITE_ALPHA = 26
-SHELL_PAD = 18
-SHELL_RADIUS = 18
-
 # Event blocks use a slightly stronger frost than the shell.
 EVENT_WHITE_ALPHA = 32
 EVENT_RADIUS = 12
@@ -129,7 +121,7 @@ def render_week(events: list[Event]) -> Image.Image:
     weekend = any(e.date.weekday() >= 5 for e in events)
     days = [monday + timedelta(days=i) for i in range(7 if weekend else 5)]
 
-    width = col_x(len(days)) + MARGIN_X
+    width = col_x(len(days) - 1) + COL_W + MARGIN_X
     grid_top = (
         MARGIN_TOP
         + TITLE_H
@@ -145,21 +137,11 @@ def render_week(events: list[Event]) -> Image.Image:
     # Two layers: `base` holds the background with frosted glass melted into it,
     # `overlay` holds lines, borders and text. They composite at the end.
     base = background_for_week(monday, width, height).convert("RGBA")
-    shell_box = (
-        MARGIN_X,
-        grid_top - DAY_LABEL_H - DAY_LABEL_GAP // 2 - SHELL_PAD,
-        width - MARGIN_X,
-        grid_bottom + SHELL_PAD,
-    )
-    _frost(base, shell_box)
 
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    draw.rounded_rectangle(
-        shell_box, radius=SHELL_RADIUS, outline=SHELL_BORDER, width=2
-    )
     _draw_header(base, draw, width, monday, days[-1], events)
-    _draw_grid(draw, days, grid_top)
+    _draw_grid(draw, days, grid_top, events)
     for event in sorted(events, key=lambda e: (e.date, e.start)):
         _draw_event(base, draw, event, days, grid_top)
     composited = Image.alpha_composite(base, overlay).convert("RGB")
@@ -168,7 +150,32 @@ def render_week(events: list[Event]) -> Image.Image:
 
 def col_x(index: int) -> int:
     """Left edge of day column `index`."""
-    return MARGIN_X + AXIS_W + index * COL_W
+    return MARGIN_X + AXIS_W + index * (COL_W + GUTTER)
+
+
+def hour_segments(
+    days: list[date], events: list[Event], grid_top: int
+) -> list[tuple[int, int, int]]:
+    """Hour-row segments per day column, omitting rows covered by events."""
+    spans: dict[int, list[tuple[float, float]]] = {}
+    for event in events:
+        col = (event.date - days[0]).days
+        if 0 <= col < len(days):
+            top = grid_top + _offset_minutes(event.start) * HOUR_H / 60
+            bottom = grid_top + _offset_minutes(event.end) * HOUR_H / 60
+            spans.setdefault(col, []).append((top, bottom))
+    segments: list[tuple[int, int, int]] = []
+    for hour in range(START_HOUR, END_HOUR + 1):
+        y = grid_top + (hour - START_HOUR) * HOUR_H
+        for i in range(len(days)):
+            covered = any(
+                top - 4 <= y <= bottom + 4 for top, bottom in spans.get(i, [])
+            )
+            if covered:
+                continue
+            x0 = col_x(i)
+            segments.append((x0, x0 + COL_W, y))
+    return segments
 
 
 def apply_grain(
@@ -189,9 +196,9 @@ def apply_grain(
 def _frost(
     base: Image.Image,
     box: tuple[int, int, int, int],
-    blur_radius: int = SHELL_BLUR_RADIUS,
-    white_alpha: int = SHELL_WHITE_ALPHA,
-    corner_radius: int = SHELL_RADIUS,
+    blur_radius: int = 14,
+    white_alpha: int = EVENT_WHITE_ALPHA,
+    corner_radius: int = EVENT_RADIUS,
 ) -> None:
     """Frost a rounded rect of the background in place with blur + white."""
     left, top, right, bottom = (int(v) for v in box)
@@ -283,18 +290,16 @@ def _draw_legend(
         y += chip_h + gap
 
 
-def _draw_grid(draw: ImageDraw.ImageDraw, days: list[date], grid_top: int) -> None:
+def _draw_grid(
+    draw: ImageDraw.ImageDraw,
+    days: list[date],
+    grid_top: int,
+    events: list[Event],
+) -> None:
     left = col_x(0)
-    right = col_x(len(days))
-    bottom = grid_top + (END_HOUR - START_HOUR) * HOUR_H
     axis_font = _font("regular", AXIS_SIZE)
     for hour in range(START_HOUR, END_HOUR + 1):
         y = grid_top + (hour - START_HOUR) * HOUR_H
-        draw.line(
-            [(left, y), (right, y)],
-            fill=TOP_RULE if hour == START_HOUR else HOUR_LINE,
-            width=2,
-        )
         draw.text(
             (left - 12, y),
             f"{hour}:00",
@@ -302,19 +307,18 @@ def _draw_grid(draw: ImageDraw.ImageDraw, days: list[date], grid_top: int) -> No
             fill=AXIS_LABEL,
             anchor="rm",
         )
+    for x0, x1, y in hour_segments(days, events, grid_top):
+        draw.line([(x0, y), (x1, y)], fill=HOUR_LINE, width=2)
     day_font = _font("regular", DAY_SIZE)
     for i, day in enumerate(days):
         x = col_x(i)
-        if i > 0:
-            draw.line([(x, grid_top), (x, bottom)], fill=DAY_DIVIDER, width=2)
         draw.text(
-            (x + COL_W / 2, grid_top - DAY_LABEL_H),
+            (x + 4, grid_top - DAY_LABEL_H),
             f"{DAY_NAMES[day.weekday()]}, {day.day}.{day.month:02d}",
             font=day_font,
             fill=OFF_WHITE,
-            anchor="mm",
+            anchor="lm",
         )
-    draw.rectangle([left, grid_top, right, bottom], outline=OUTER_BORDER, width=2)
 
 
 def _draw_event(
