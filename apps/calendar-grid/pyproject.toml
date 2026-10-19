@@ -17,3 +17,6 @@ packages = ["src/calendar_grid"]
 
 [tool.uv.sources]
 plan-parser = { workspace = true }
+
+[tool.deptry.per_rule_ignores]
+DEP003 = ["calendar_grid"]
