@@ -1,11 +1,12 @@
 """Turn a week's events into a Pillow image in the graphite-frost style."""
 
+import random
 import re
 from datetime import date, time, timedelta
 from functools import cache
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from calendar_grid.background import background_for_week
 from plan_parser import Event
@@ -150,7 +151,23 @@ def render_week(events: list[Event]) -> Image.Image:
     _draw_grid(draw, days, grid_top)
     for event in sorted(events, key=lambda e: (e.date, e.start)):
         _draw_event(base, draw, event, days, grid_top)
-    return Image.alpha_composite(base, overlay).convert("RGB")
+    composited = Image.alpha_composite(base, overlay).convert("RGB")
+    return apply_grain(composited, monday.toordinal())
+
+
+def apply_grain(
+    image: Image.Image, seed: int, sigma: int = 28, opacity: float = 0.22
+) -> Image.Image:
+    """Overlay deterministic monochrome film grain over the whole image."""
+    width, height = image.size
+    rng = random.Random(seed)
+    raw = rng.randbytes(width * height)
+    noise = Image.frombytes("L", (width, height), raw)
+    scale = sigma / 64
+    lut = [max(0, min(255, int(128 + (i - 128) * scale))) for i in range(256)]
+    centered = noise.point(lut).convert("RGB")
+    overlaid = ImageChops.overlay(image, centered)
+    return Image.blend(image, overlaid, opacity)
 
 
 def _frost(

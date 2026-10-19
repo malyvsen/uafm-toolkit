@@ -4,7 +4,7 @@ from datetime import date, time
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageStat
 
 from calendar_grid.background import background_for_week
 from calendar_grid.renderer import (
@@ -12,6 +12,7 @@ from calendar_grid.renderer import (
     UNKNOWN_SPINE,
     WAR_YELLOW,
     WYK_ORANGE,
+    apply_grain,
     format_room,
     render_week,
 )
@@ -117,6 +118,22 @@ def test_unknown_form_renders_light_spine(week_19: list[Event]):
     image = render_week([event])
     spine = image.getpixel((121, 537))
     assert isinstance(spine, tuple) and _close(spine, UNKNOWN_SPINE)
+
+
+def test_grain_is_deterministic(week_19: list[Event]):
+    image = render_week(week_19)
+    grained = apply_grain(image, date(2026, 10, 19).toordinal())
+    regrained = apply_grain(image, date(2026, 10, 19).toordinal())
+    assert grained.tobytes() == regrained.tobytes()
+
+
+def test_grain_raises_variance_on_background_patch(week_19: list[Event]):
+    image = render_week(week_19)
+    bare = background_for_week(date(2026, 10, 19), *image.size)
+    patch = (8, 8, 40, 40)
+    grained_std = sum(ImageStat.Stat(image.crop(patch)).stddev)
+    bare_std = sum(ImageStat.Stat(bare.crop(patch)).stddev)
+    assert grained_std > bare_std
 
 
 def _close(
