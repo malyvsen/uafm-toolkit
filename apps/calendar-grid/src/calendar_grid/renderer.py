@@ -129,7 +129,7 @@ def render_week(events: list[Event]) -> Image.Image:
     weekend = any(e.date.weekday() >= 5 for e in events)
     days = [monday + timedelta(days=i) for i in range(7 if weekend else 5)]
 
-    width = MARGIN_X + AXIS_W + len(days) * COL_W + MARGIN_X
+    width = col_x(len(days)) + MARGIN_X
     grid_top = (
         MARGIN_TOP
         + TITLE_H
@@ -164,6 +164,11 @@ def render_week(events: list[Event]) -> Image.Image:
         _draw_event(base, draw, event, days, grid_top)
     composited = Image.alpha_composite(base, overlay).convert("RGB")
     return apply_grain(composited, monday.toordinal())
+
+
+def col_x(index: int) -> int:
+    """Left edge of day column `index`."""
+    return MARGIN_X + AXIS_W + index * COL_W
 
 
 def apply_grain(
@@ -279,8 +284,8 @@ def _draw_legend(
 
 
 def _draw_grid(draw: ImageDraw.ImageDraw, days: list[date], grid_top: int) -> None:
-    left = MARGIN_X + AXIS_W
-    right = left + len(days) * COL_W
+    left = col_x(0)
+    right = col_x(len(days))
     bottom = grid_top + (END_HOUR - START_HOUR) * HOUR_H
     axis_font = _font("regular", AXIS_SIZE)
     for hour in range(START_HOUR, END_HOUR + 1):
@@ -299,7 +304,7 @@ def _draw_grid(draw: ImageDraw.ImageDraw, days: list[date], grid_top: int) -> No
         )
     day_font = _font("regular", DAY_SIZE)
     for i, day in enumerate(days):
-        x = left + i * COL_W
+        x = col_x(i)
         if i > 0:
             draw.line([(x, grid_top), (x, bottom)], fill=DAY_DIVIDER, width=2)
         draw.text(
@@ -322,7 +327,7 @@ def _draw_event(
     col = (event.date - days[0]).days
     top = grid_top + _offset_minutes(event.start) * HOUR_H / 60
     bottom = grid_top + _offset_minutes(event.end) * HOUR_H / 60
-    x = MARGIN_X + AXIS_W + col * COL_W + BLOCK_PAD_X
+    x = col_x(col) + BLOCK_PAD_X
     box = (x, top, x + COL_W - 2 * BLOCK_PAD_X, bottom)
     style = FORM_STYLES.get(event.form)
     spine_color = style[1] if style else UNKNOWN_SPINE

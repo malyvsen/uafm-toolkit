@@ -8,7 +8,6 @@ from PIL import Image, ImageStat
 
 from calendar_grid.background import background_for_week
 from calendar_grid.renderer import (
-    AXIS_W,
     BLOCK_PAD_X,
     COL_W,
     DAY_LABEL_GAP,
@@ -16,7 +15,6 @@ from calendar_grid.renderer import (
     GRID_GAP,
     HOUR_H,
     MARGIN_TOP,
-    MARGIN_X,
     START_HOUR,
     SUBTITLE_H,
     TITLE_GAP,
@@ -27,6 +25,7 @@ from calendar_grid.renderer import (
     BlockLine,
     LineKind,
     apply_grain,
+    col_x,
     format_room,
     layout_block,
     render_week,
@@ -246,7 +245,7 @@ def _minutes(moment: time) -> float:
 
 def _block_left(event: Event, monday: date) -> int:
     col = (event.date - monday).days
-    return MARGIN_X + AXIS_W + col * COL_W + BLOCK_PAD_X
+    return col_x(col) + BLOCK_PAD_X
 
 
 def _spine_pixel(event: Event, monday: date) -> tuple[int, int]:
