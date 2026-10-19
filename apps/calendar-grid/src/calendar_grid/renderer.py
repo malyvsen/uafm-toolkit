@@ -1,18 +1,25 @@
-"""Turn a week's events into a Pillow image in the humanistic timetable style."""
+"""Turn a week's events into a Pillow image in the graphite-frost style."""
 
 import re
 from datetime import date, time, timedelta
 from functools import cache
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from calendar_grid.background import background_for_week
 from plan_parser import Event
 
 CREAM = (246, 241, 227)
 INK = (43, 38, 33)
-FAINT = (214, 202, 178)
-MUTED = (122, 112, 94)
+OFF_WHITE = (244, 245, 246)
+SOFT_GREY = (185, 192, 201)
+AXIS_LABEL = (244, 245, 246, 160)
+HOUR_LINE = (255, 255, 255, 28)
+TOP_RULE = (255, 255, 255, 70)
+DAY_DIVIDER = (255, 255, 255, 28)
+OUTER_BORDER = (255, 255, 255, 70)
+SHELL_BORDER = (255, 255, 255, 46)
 WAR_YELLOW = (233, 202, 110)
 WYK_ORANGE = (216, 142, 93)
 KON_PINK = (229, 168, 178)
@@ -53,6 +60,10 @@ BLOCK_PAD_Y = 10
 SUBJECT_STEP = 30
 META_STEP = 27
 LINE_SLACK = 8
+
+# Frosted grid shell: padding around the timetable area and corner radius.
+SHELL_PAD = 18
+SHELL_RADIUS = 18
 
 DAY_NAMES = [
     "Poniedziałek",
@@ -113,15 +124,51 @@ def render_week(events: list[Event]) -> Image.Image:
         + DAY_LABEL_GAP
         + GRID_GAP
     )
-    height = grid_top + (END_HOUR - START_HOUR) * HOUR_H + MARGIN_BOTTOM
+    grid_bottom = grid_top + (END_HOUR - START_HOUR) * HOUR_H
+    height = grid_bottom + MARGIN_BOTTOM
 
-    image = Image.new("RGB", (width, height), CREAM)
-    draw = ImageDraw.Draw(image)
+    base = background_for_week(monday, width, height).convert("RGBA")
+    shell_box = (
+        MARGIN_X,
+        grid_top - DAY_LABEL_H - DAY_LABEL_GAP // 2 - SHELL_PAD,
+        width - MARGIN_X,
+        grid_bottom + SHELL_PAD,
+    )
+    _frost(base, shell_box)
+
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    draw.rounded_rectangle(
+        shell_box, radius=SHELL_RADIUS, outline=SHELL_BORDER, width=2
+    )
     _draw_header(draw, width, monday, days[-1], events)
     _draw_grid(draw, days, grid_top)
     for event in sorted(events, key=lambda e: (e.date, e.start)):
         _draw_event(draw, event, days, grid_top)
-    return image
+    return Image.alpha_composite(base, overlay).convert("RGB")
+
+
+def _frost(
+    base: Image.Image,
+    box: tuple[int, int, int, int],
+    radius: int = 14,
+    white_alpha: int = 26,
+) -> None:
+    """Frost a rounded rect of the background in place with blur + white."""
+    left, top, right, bottom = (int(v) for v in box)
+    width, height = right - left, bottom - top
+    if width <= 0 or height <= 0:
+        return
+    region = base.crop((left, top, right, bottom)).filter(
+        ImageFilter.GaussianBlur(radius)
+    )
+    white = Image.new("RGBA", (width, height), (255, 255, 255, white_alpha))
+    frosted = Image.alpha_composite(region.convert("RGBA"), white)
+    mask = Image.new("L", (width, height), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [0, 0, width, height], radius=SHELL_RADIUS, fill=255
+    )
+    base.paste(frosted, (left, top), mask)
 
 
 def _draw_header(
@@ -129,10 +176,10 @@ def _draw_header(
 ) -> None:
     title = _font("bold", TITLE_SIZE)
     subtitle_font = _font("regular", SUBTITLE_SIZE)
-    draw.text((MARGIN_X, MARGIN_TOP), "Plan zajęć", font=title, fill=INK)
+    draw.text((MARGIN_X, MARGIN_TOP), "Plan zajęć", font=title, fill=OFF_WHITE)
     subtitle = _week_range(monday, last)
     subtitle_top = MARGIN_TOP + 76 + 8
-    draw.text((MARGIN_X, subtitle_top), subtitle, font=subtitle_font, fill=INK)
+    draw.text((MARGIN_X, subtitle_top), subtitle, font=subtitle_font, fill=SOFT_GREY)
     bottom = draw.textbbox((MARGIN_X, subtitle_top), subtitle, font=subtitle_font)[3]
     _draw_legend(draw, width, bottom, events)
 
@@ -166,13 +213,15 @@ def _draw_legend(
         label, color = FORM_STYLES.get(form, (form, INK))
         spine_color = CREAM if form not in FORM_STYLES else INK
         x = width - MARGIN_X - chip_w - 12 - draw.textlength(label, font=font)
-        draw.rectangle([x, y, x + chip_w, y + chip_h], fill=color, outline=INK, width=2)
+        draw.rectangle(
+            [x, y, x + chip_w, y + chip_h], fill=color, outline=OFF_WHITE, width=2
+        )
         draw.rectangle([x, y, x + 7, y + chip_h], fill=spine_color)
         draw.text(
             (x + chip_w + 12, y + chip_h / 2),
             label,
             font=font,
-            fill=INK,
+            fill=OFF_WHITE,
             anchor="lm",
         )
         y += chip_h + gap
@@ -186,28 +235,30 @@ def _draw_grid(draw: ImageDraw.ImageDraw, days: list[date], grid_top: int) -> No
     for hour in range(START_HOUR, END_HOUR + 1):
         y = grid_top + (hour - START_HOUR) * HOUR_H
         draw.line(
-            [(left, y), (right, y)], fill=FAINT if hour > START_HOUR else INK, width=2
+            [(left, y), (right, y)],
+            fill=TOP_RULE if hour == START_HOUR else HOUR_LINE,
+            width=2,
         )
         draw.text(
             (left - 12, y),
             f"{hour}:00",
             font=axis_font,
-            fill=MUTED,
+            fill=AXIS_LABEL,
             anchor="rm",
         )
     day_font = _font("regular", DAY_SIZE)
     for i, day in enumerate(days):
         x = left + i * COL_W
         if i > 0:
-            draw.line([(x, grid_top), (x, bottom)], fill=INK, width=2)
+            draw.line([(x, grid_top), (x, bottom)], fill=DAY_DIVIDER, width=2)
         draw.text(
             (x + COL_W / 2, grid_top - DAY_LABEL_H),
             f"{DAY_NAMES[day.weekday()]}, {day.day}.{day.month:02d}",
             font=day_font,
-            fill=INK,
+            fill=OFF_WHITE,
             anchor="mm",
         )
-    draw.rectangle([left, grid_top, right, bottom], outline=INK, width=2)
+    draw.rectangle([left, grid_top, right, bottom], outline=OUTER_BORDER, width=2)
 
 
 def _draw_event(

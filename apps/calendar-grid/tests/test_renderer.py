@@ -57,6 +57,10 @@ def test_render_is_valid_png_with_expected_dimensions(
         assert reopened.size == (1648, 1698)
 
 
+def test_render_is_deterministic(week_19: list[Event]):
+    assert render_week(week_19).tobytes() == render_week(week_19).tobytes()
+
+
 def test_weekend_columns_appear_only_with_weekend_events(week_19: list[Event]):
     plain = render_week(week_19)
     with_weekend = render_week([*week_19, saturday_event(week_19[0])])
