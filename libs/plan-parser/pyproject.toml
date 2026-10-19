@@ -1,0 +1,13 @@
+[project]
+name = "plan-parser"
+version = "0.1.0"
+description = "Parse Polish university study-plan PDFs into typed events."
+requires-python = ">=3.15"
+dependencies = ["pdfplumber"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plan_parser"]

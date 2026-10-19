@@ -11,3 +11,9 @@ dev = [
     "ruff>=0.17.1",
     "ty>=0.0.89",
 ]
+
+[tool.uv.workspace]
+members = ["libs/plan-parser", "apps/calendar-grid"]
+
+[tool.pytest.ini_options]
+testpaths = ["libs", "apps"]
