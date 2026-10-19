@@ -4,6 +4,11 @@ includes:
   python: ../../taskfiles/python.yml
 
 tasks:
+  run:
+    desc: Render timetable (args after -- are passed through)
+    cmds:
+      - uv run --no-sync calendar-grid {{.CLI_ARGS}}
+
   check:
     desc: Run all checks
     deps: [python:check]
