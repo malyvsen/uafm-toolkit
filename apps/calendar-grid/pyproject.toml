@@ -1,7 +1,7 @@
 [project]
 name = "calendar-grid"
 version = "0.1.0"
-description = "Render a single week of classes as a shareable PNG timetable."
+description = "Render all weeks of classes as shareable PNG timetables."
 requires-python = ">=3.15"
 dependencies = ["cyclopts", "pillow", "plan-parser"]
 

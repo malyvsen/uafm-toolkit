@@ -1,4 +1,4 @@
-"""Render a single week of classes as a shareable PNG timetable."""
+"""Render all weeks of classes as shareable PNG timetables."""
 
 from calendar_grid.renderer import render_week
 

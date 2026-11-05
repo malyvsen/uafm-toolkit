@@ -1,12 +1,11 @@
 # calendar-grid
 
-CLI that renders a single week of a study-plan PDF as a shareable PNG timetable.
+CLI that renders all weeks of a study-plan PDF as shareable PNG timetables.
 
 ## Usage
 
 ```sh
-calendar-grid plan.pdf -o tydzien.png [--week RRRR-MM-DD]
+calendar-grid plan.pdf
 ```
 
-`--week` takes the Monday starting the week. It is optional when the PDF holds
-a single week and required when it holds several.
+Each Monday in the plan produces `plan-<MONDAY>.png` next to the PDF.
