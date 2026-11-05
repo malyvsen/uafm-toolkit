@@ -19,7 +19,7 @@ class CalendarError(Exception):
 
 @app.default
 def main(pdf: Path) -> None:
-    """Render every week of PDF as a dated PNG timetable next to it."""
+    """Render every week of PDF as dated PNG timetables next to it."""
     try:
         saved = render_pdf_weeks(pdf)
     except CalendarError as exc:
@@ -37,7 +37,7 @@ def render_pdf_weeks(pdf: Path) -> list[Path]:
     mondays = available_weeks(events)
     if not mondays:
         raise CalendarError(f"Plik nie zawiera żadnych zajęć: {pdf}.")
-    saved = []
+    saved: list[Path] = []
     for monday in mondays:
         selected = events_for_week(events, monday)
         path = pdf.parent / f"{pdf.stem}-{monday}.png"

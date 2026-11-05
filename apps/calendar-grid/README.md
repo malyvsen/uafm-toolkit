@@ -8,4 +8,5 @@ CLI that renders all weeks of a study-plan PDF as shareable PNG timetables.
 calendar-grid plan.pdf
 ```
 
-Each Monday in the plan produces `plan-<MONDAY>.png` next to the PDF.
+Each Monday in the plan produces `<stem>-<MONDAY>.png` next to the PDF
+(e.g. `plan-2026-10-19.png`).
