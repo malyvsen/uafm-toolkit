@@ -1,8 +1,8 @@
 """Turn study-plan PDF tables into typed events."""
 
+import io
 import re
 from datetime import date, time
-from pathlib import Path
 
 import pdfplumber
 
@@ -16,11 +16,11 @@ _HYPHEN_BREAK_RE = re.compile(r"(?<=\S)-\n\s*")
 _COLUMN_COUNT = 12
 
 
-def parse_pdf(path: Path | str) -> list[Event]:
-    """Parse every class row in the PDF into events, in file order."""
+def parse_pdf(data: bytes) -> list[Event]:
+    """Parse every class row in the PDF bytes into events, in file order."""
     events: list[Event] = []
     current: date | None = None
-    with pdfplumber.open(path) as pdf:
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
         for page in pdf.pages:
             for table in page.extract_tables():
                 for row in table:

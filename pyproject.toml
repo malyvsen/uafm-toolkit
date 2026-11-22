@@ -13,10 +13,10 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["libs/plan-parser", "apps/calendar-grid", "apps/plan-downloader"]
+members = ["libs/plan-downloader", "libs/plan-parser", "apps/calendar-grid"]
 
 [tool.pytest.ini_options]
 testpaths = ["libs", "apps"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["calendar_grid", "plan_parser"]
+known-first-party = ["calendar_grid", "plan_downloader", "plan_parser"]

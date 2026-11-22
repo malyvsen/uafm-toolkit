@@ -4,11 +4,6 @@ includes:
   python: ../../taskfiles/python.yml
 
 tasks:
-  run:
-    desc: Download a timetable PDF (args after -- are passed through)
-    cmds:
-      - uv run --no-sync plan-downloader {{.CLI_ARGS}}
-
   check:
     desc: Run all checks
     deps: [python:check]

@@ -18,12 +18,19 @@ TWO = FIXTURES / "plan-two-weeks.pdf"
 
 
 @pytest.fixture(scope="module")
+def single_weeks() -> list[Event]:
+    return parse_pdf(SINGLE.read_bytes())
+
+
+@pytest.fixture(scope="module")
 def two_weeks() -> list[Event]:
-    return parse_pdf(TWO)
+    return parse_pdf(TWO.read_bytes())
 
 
-def test_available_weeks_lists_mondays_oldest_first(two_weeks: list[Event]):
-    assert available_weeks(parse_pdf(SINGLE)) == ["2026-10-19"]
+def test_available_weeks_lists_mondays_oldest_first(
+    single_weeks: list[Event], two_weeks: list[Event]
+):
+    assert available_weeks(single_weeks) == ["2026-10-19"]
     assert available_weeks(two_weeks) == ["2026-10-19", "2026-10-26"]
 
 

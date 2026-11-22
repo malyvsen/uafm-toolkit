@@ -40,7 +40,7 @@ SINGLE = FIXTURES / "plan-single-week.pdf"
 
 @pytest.fixture(scope="module")
 def week_19() -> list[Event]:
-    return events_for_week(parse_pdf(SINGLE), "2026-10-19")
+    return events_for_week(parse_pdf(SINGLE.read_bytes()), "2026-10-19")
 
 
 def saturday_event(base: Event) -> Event:

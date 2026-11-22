@@ -5,7 +5,7 @@ from pathlib import Path
 import pdfplumber
 import pytest
 
-from plan_parser import available_weeks, parse_pdf
+from plan_parser import Event, available_weeks, parse_pdf
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SINGLE = FIXTURES / "plan-single-week.pdf"
@@ -26,20 +26,28 @@ REAL_SURNAMES = [
 ]
 
 
-def test_single_week_holds_eight_events_on_one_monday():
-    events = parse_pdf(SINGLE)
-    assert len(events) == 8
-    assert available_weeks(events) == ["2026-10-19"]
+@pytest.fixture(scope="module")
+def single_events() -> list[Event]:
+    return parse_pdf(SINGLE.read_bytes())
 
 
-def test_two_weeks_hold_eighteen_events_on_two_mondays():
-    events = parse_pdf(TWO)
-    assert len(events) == 18
-    assert available_weeks(events) == ["2026-10-19", "2026-10-26"]
+@pytest.fixture(scope="module")
+def two_events() -> list[Event]:
+    return parse_pdf(TWO.read_bytes())
 
 
-def test_first_event_spot_check():
-    event = parse_pdf(SINGLE)[0]
+def test_single_week_holds_eight_events_on_one_monday(single_events: list[Event]):
+    assert len(single_events) == 8
+    assert available_weeks(single_events) == ["2026-10-19"]
+
+
+def test_two_weeks_hold_eighteen_events_on_two_mondays(two_events: list[Event]):
+    assert len(two_events) == 18
+    assert available_weeks(two_events) == ["2026-10-19", "2026-10-26"]
+
+
+def test_first_event_spot_check(single_events: list[Event]):
+    event = single_events[0]
     assert event.date.isoformat() == "2026-10-19"
     assert (event.start.hour, event.start.minute) == (9, 40)
     assert (event.end.hour, event.end.minute) == (12, 5)
@@ -50,8 +58,8 @@ def test_first_event_spot_check():
     assert event.duration == "3h00m"
 
 
-def test_multigroup_lecture_spot_check():
-    event = next(e for e in parse_pdf(SINGLE) if e.subject == "Antropologia")
+def test_multigroup_lecture_spot_check(single_events: list[Event]):
+    event = next(e for e in single_events if e.subject == "Antropologia")
     assert event.date.isoformat() == "2026-10-22"
     assert (event.start.hour, event.start.minute) == (13, 0)
     assert "B 203" in event.room
@@ -62,27 +70,26 @@ def test_multigroup_lecture_spot_check():
     assert event.credit_form == "Egzamin"
 
 
-def test_hyphenated_surname_is_rejoined():
-    event = next(e for e in parse_pdf(TWO) if e.date.isoformat() == "2026-10-30")
+def test_hyphenated_surname_is_rejoined(two_events: list[Event]):
+    event = next(e for e in two_events if e.date.isoformat() == "2026-10-30")
     assert event.subject == "Język filmu i telewizji"
     assert event.lecturer == "mgr Leokadia Piotrowska-Ostrowska"
 
 
-def test_separator_hyphens_keep_their_spaces():
-    event = next(e for e in parse_pdf(SINGLE) if e.subject == "Świadomość ciała")
+def test_separator_hyphens_keep_their_spaces(single_events: list[Event]):
+    event = next(e for e in single_events if e.subject == "Świadomość ciała")
     assert event.room == "bud.D D - 02 - SALA BALETOWA"
 
 
-def test_date_carries_across_page_breaks():
-    events = parse_pdf(TWO)
-    carried = [e for e in events if e.date.isoformat() == "2026-10-26"]
+def test_date_carries_across_page_breaks(two_events: list[Event]):
+    carried = [e for e in two_events if e.date.isoformat() == "2026-10-26"]
     assert [e.subject for e in carried] == [
         "Interpretacja prozy",
         "Elementarne zadania aktorskie",
         "Emisja głosu",
         "Bezpieczeństwo lokalne",
     ]
-    friday = [e for e in events if e.date.isoformat() == "2026-10-30"]
+    friday = [e for e in two_events if e.date.isoformat() == "2026-10-30"]
     assert len(friday) == 1
 
 

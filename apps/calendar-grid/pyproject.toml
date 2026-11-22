@@ -3,7 +3,7 @@ name = "calendar-grid"
 version = "0.1.0"
 description = "Render all weeks of classes as shareable PNG timetables."
 requires-python = ">=3.15"
-dependencies = ["cyclopts", "pillow", "plan-parser"]
+dependencies = ["cyclopts", "pillow", "plan-downloader", "plan-parser"]
 
 [project.scripts]
 calendar-grid = "calendar_grid.cli:app"
@@ -16,6 +16,7 @@ build-backend = "hatchling.build"
 packages = ["src/calendar_grid"]
 
 [tool.uv.sources]
+plan-downloader = { workspace = true }
 plan-parser = { workspace = true }
 
 [tool.deptry.per_rule_ignores]

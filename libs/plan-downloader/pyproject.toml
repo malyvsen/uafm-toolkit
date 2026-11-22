@@ -3,10 +3,7 @@ name = "plan-downloader"
 version = "0.1.0"
 description = "Download study-plan PDFs by driving Firefox."
 requires-python = ">=3.15"
-dependencies = ["cyclopts", "playwright"]
-
-[project.scripts]
-plan-downloader = "plan_downloader.cli:app"
+dependencies = ["playwright", "pyotp", "python-dotenv"]
 
 [build-system]
 requires = ["hatchling"]
