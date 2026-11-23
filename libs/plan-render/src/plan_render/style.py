@@ -61,6 +61,16 @@ META_STEP = 27
 ROOM_GAP = 7
 LINE_SLACK = 8
 
+# Choice-block geometry: one combined block per collision, with a dashed
+# divider between class sections and a small opaque chip per section
+# (spine color, no full-height spine).
+SEPARATOR_GAP = 16
+CHOICE_CHIP_W = 8
+CHOICE_CHIP_H = 15
+SEPARATOR_DASH = 6
+SEPARATOR_DASH_GAP = 4
+SEPARATOR_COLOR = (255, 255, 255, 64)
+
 # Frosted glass for event blocks: blur and white overlay, plus corner radius.
 EVENT_BLUR_RADIUS = 14
 EVENT_WHITE_ALPHA = 32
