@@ -18,8 +18,9 @@ Everything stays in memory: only `<output-dir>/plan-overlap-<FROM>-<TO>.png` is 
 
 ## Reading the image
 
-Each block spans the merged time of overlapping class instances; a real break
-always splits the block. Inside, time variants are sorted by start with weekly
-counts (`14:40–17:05 ×3`), then rooms with counts (`sala D -02 ×4`). Solid
-blocks happen every week, pale ones are rare. Colliding classes share the
-column side by side.
+Each block spans the merged time of its classes; a real break always splits
+the block. A block holds one section per colliding class: subject lines plus
+time variants sorted by start with weekly counts (`14:00–15:25 ×4`). There are
+no room lines. A small chip in the class color marks each section instead of a
+shared spine. Solid blocks happen every week, pale ones are rare; a combined
+block uses its most solid member's opacity.

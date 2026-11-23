@@ -60,6 +60,20 @@ def cluster_events(events: list[Event]) -> list[Cluster]:
     return _assign_lanes(clusters)
 
 
+def overlap_components(clusters: list[Cluster]) -> list[list[Cluster]]:
+    """Group clusters by weekday into transitively overlapping components."""
+    by_day: dict[int, list[Cluster]] = {}
+    for cluster in clusters:
+        by_day.setdefault(cluster.weekday, []).append(cluster)
+    components: list[list[Cluster]] = []
+    for weekday in sorted(by_day):
+        day_clusters = sorted(
+            by_day[weekday], key=lambda c: (c.start, c.end, c.subject)
+        )
+        components.extend(_components(day_clusters))
+    return components
+
+
 def _merge(key: tuple[int, str, str], instances: list[Event]) -> list[Cluster]:
     """Merge a start-sorted run while instances overlap or touch; a gap splits."""
     weekday, subject, form = key

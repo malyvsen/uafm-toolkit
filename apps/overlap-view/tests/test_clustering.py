@@ -7,6 +7,7 @@ from overlap_view.clustering import (
     RoomVariant,
     TimeVariant,
     cluster_events,
+    overlap_components,
 )
 from plan_parser import Event
 
@@ -131,3 +132,26 @@ def test_weekend_events_are_skipped():
 
 def test_empty_events_yield_no_clusters():
     assert cluster_events([]) == []
+
+
+def test_overlapping_clusters_form_one_component_transitively():
+    events = [
+        make_event(3, time(13, 0), time(14, 0), subject="A"),
+        make_event(3, time(13, 30), time(14, 30), subject="B"),
+        make_event(3, time(14, 15), time(15, 0), subject="C"),
+    ]
+    clusters = cluster_events(events)
+    components = overlap_components(clusters)
+    assert len(components) == 1
+    assert {c.subject for c in components[0]} == {"A", "B", "C"}
+
+
+def test_separate_clusters_stay_in_their_own_components():
+    events = [
+        make_event(0, time(9, 40), time(12, 5), subject="Wymowa"),
+        make_event(0, time(14, 0), time(15, 0), subject="Głos"),
+    ]
+    clusters = cluster_events(events)
+    components = overlap_components(clusters)
+    assert len(components) == 2
+    assert all(len(component) == 1 for component in components)
