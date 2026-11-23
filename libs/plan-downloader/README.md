@@ -20,7 +20,9 @@ from pathlib import Path
 
 from plan_downloader import download_timetable
 
-Path("plan.pdf").write_bytes(download_timetable(date(2026, 10, 1), date(2026, 10, 31)))
+Path("plan.pdf").write_bytes(
+    download_timetable(date(2026, 10, 1), date(2026, 10, 31), on_progress=print)
+)
 ```
 
 ## Record a manual run

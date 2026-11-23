@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -39,9 +40,11 @@ def stub_download(
         date_from: date,
         date_to: date,
         *,
+        on_progress: Callable[[str], None],
         credentials: Credentials | None = None,
     ) -> bytes:
         calls.append((date_from, date_to))
+        on_progress("Pobieranie planu…")
         return data
 
     monkeypatch.setattr("calendar_grid.cli.download_timetable", fake_download)

@@ -1,5 +1,6 @@
 """Drive Firefox through login, date selection, and PDF download."""
 
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
@@ -17,6 +18,7 @@ def download_timetable(
     date_from: date,
     date_to: date,
     *,
+    on_progress: Callable[[str], None],
     headed: bool = False,
     credentials: Credentials | None = None,
 ) -> bytes:
@@ -26,11 +28,16 @@ def download_timetable(
         browser = playwright.firefox.launch(headless=not headed)
         try:
             page = browser.new_page()
+            on_progress("Otwieranie dziekanatu…")
             page.goto("https://dziekanat.uafm.edu.pl/")
             _dismiss_cookies(page)
+            on_progress("Logowanie…")
             _login(page, resolved)
+            on_progress("Otwieranie planów zajęć…")
             _open_plans(page)
+            on_progress("Wyszukiwanie zajęć…")
             _set_date_range(page, date_from, date_to)
+            on_progress("Pobieranie planu…")
             return _fetch_timetable_pdf(page)
         finally:
             browser.close()

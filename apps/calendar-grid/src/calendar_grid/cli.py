@@ -33,7 +33,7 @@ def main(
     """Generate every week as dated PNGs."""
     try:
         start, end = resolve_date_range(date_from, date_to, today=date.today())
-        data = download_timetable(start, end)
+        data = download_timetable(start, end, on_progress=print)
         saved = render_weeks(parse_pdf(data), output_dir)
     except (CalendarError, CredentialsError, DownloadError) as exc:
         print(exc, file=sys.stderr)
