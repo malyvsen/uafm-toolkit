@@ -13,7 +13,7 @@ task run -- --date-from 2026-10-01 --date-to 2027-01-31 --output-dir timetables
 
 Without dates, the remaining UAFM full-time teaching period is used (see
 `semester.py`). Credentials come from `.env` (see `libs/plan-downloader`).
-Everything stays in memory: only `<output-dir>/plan-overlap.png` is written
+Everything stays in memory: only `<output-dir>/plan-overlap-<FROM>-<TO>.png` is written
 (default output dir `~/Downloads`).
 
 ## Reading the image

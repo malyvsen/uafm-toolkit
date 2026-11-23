@@ -19,7 +19,6 @@ app = cyclopts.App(
 )
 
 DEFAULT_OUTPUT_DIR = Path(platformdirs.user_downloads_dir())
-OUTPUT_NAME = "plan-overlap.png"
 
 
 class OverlapError(Exception):
@@ -65,11 +64,17 @@ def render_overlap(events: list[Event], output_dir: Path) -> Path:
     dates = [event.date for event in events]
     distinct_weeks = {(day.isocalendar().year, day.isocalendar().week) for day in dates}
     output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / OUTPUT_NAME
+    date_from, date_to = min(dates), max(dates)
+    path = output_dir / output_name(date_from, date_to)
     render_typical(
         clusters,
-        date_from=min(dates),
-        date_to=max(dates),
+        date_from=date_from,
+        date_to=date_to,
         weeks=len(distinct_weeks),
     ).save(path)
     return path
+
+
+def output_name(date_from: date, date_to: date) -> str:
+    """Dated PNG name so different ranges never overwrite each other."""
+    return f"plan-overlap-{date_from.isoformat()}-{date_to.isoformat()}.png"

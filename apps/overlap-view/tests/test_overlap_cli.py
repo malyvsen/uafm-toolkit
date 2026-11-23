@@ -12,6 +12,7 @@ from PIL import Image
 from overlap_view.cli import (
     OverlapError,
     main,
+    output_name,
     render_overlap,
     resolve_date_range,
 )
@@ -52,7 +53,7 @@ def stub_download(
 
 
 def test_overlap_produces_single_png(tmp_path: Path, two_events: list[Event]):
-    expected = tmp_path / "plan-overlap.png"
+    expected = tmp_path / "plan-overlap-2026-10-19-2026-10-30.png"
     assert render_overlap(two_events, tmp_path) == expected
     with Image.open(expected) as image:
         image.load()
@@ -64,6 +65,23 @@ def test_rerun_overwrites_silently(tmp_path: Path, two_events: list[Event]):
     second = render_overlap(two_events, tmp_path)
     assert first == second
     assert first.exists()
+
+
+def test_different_dates_give_different_names(two_events: list[Event]):
+    full = output_name(min(e.date for e in two_events), max(e.date for e in two_events))
+    first_week = [e for e in two_events if e.date < date(2026, 10, 26)]
+    partial = output_name(
+        min(e.date for e in first_week), max(e.date for e in first_week)
+    )
+    assert full == "plan-overlap-2026-10-19-2026-10-30.png"
+    assert partial != full
+    assert partial.startswith("plan-overlap-2026-10-19-")
+
+
+def test_output_name_encodes_range():
+    assert output_name(date(2026, 10, 19), date(2026, 10, 30)) == (
+        "plan-overlap-2026-10-19-2026-10-30.png"
+    )
 
 
 def test_empty_events_fail(tmp_path: Path):
@@ -102,7 +120,7 @@ def test_main_downloads_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     )
     assert calls == [(date(2026, 10, 1), date(2026, 10, 31))]
     assert list(tmp_path.glob("*.pdf")) == []
-    assert (tmp_path / "plan-overlap.png").exists()
+    assert (tmp_path / "plan-overlap-2026-10-19-2026-10-30.png").exists()
 
 
 def test_main_defaults_to_semester_remainder(
@@ -112,7 +130,7 @@ def test_main_defaults_to_semester_remainder(
     main(output_dir=tmp_path)
     today = date.today()
     assert calls == [semester_remainder(today)]
-    assert (tmp_path / "plan-overlap.png").exists()
+    assert (tmp_path / "plan-overlap-2026-10-19-2026-10-30.png").exists()
 
 
 def test_console_script_help():
