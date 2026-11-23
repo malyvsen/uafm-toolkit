@@ -86,16 +86,15 @@ def layout_block(
 def layout_cluster(
     subject: str,
     times: list[str],
-    rooms: list[str],
     text_w: float,
     block_h: float,
     measure: BlockMeasure,
 ) -> list[BlockLine]:
-    """Lay out one overlapping cluster: subject, time variants, room variants.
+    """Lay out one overlapping cluster: subject plus time variants.
 
-    Times come sorted by start with counts (`14:40–17:05 ×3`); rooms are
-    separate lines with counts (`sala D 319 ×4`). Callers sort; this only wraps
-    the subject, truncates variants, and drops rooms when space is tight.
+    Times come sorted by start with counts (`14:40–17:05 ×3`). Callers sort;
+    this only wraps the subject, truncates variants, and drops times when
+    space is tight.
     """
 
     subject_options = _subject_options(subject, text_w, measure)
@@ -103,19 +102,10 @@ def layout_cluster(
     def meta_width(text: str) -> float:
         return measure(text, "meta")
 
-    def room_width(text: str) -> float:
-        return measure(text, "room")
-
     time_lines: list[BlockLine] = [
         (_truncate(time, text_w, meta_width), "meta") for time in times
     ]
-    room_lines: list[BlockLine] = [
-        (_truncate(room, text_w, room_width), "room") for room in rooms
-    ]
 
-    for subj in subject_options:
-        if _fits([*subj, *time_lines, *room_lines], block_h):
-            return [*subj, *time_lines, *room_lines]
     for subj in subject_options:
         if _fits([*subj, *time_lines], block_h):
             return [*subj, *time_lines]

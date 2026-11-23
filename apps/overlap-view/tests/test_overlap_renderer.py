@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from overlap_view.clustering import Cluster, RoomVariant, TimeVariant, cluster_events
+from overlap_view.clustering import Cluster, TimeVariant, cluster_events
 from overlap_view.renderer import alpha_for, render_typical
 from plan_parser import parse_pdf
 from plan_render import canvas as canvas_module
@@ -83,10 +83,7 @@ def test_colliding_clusters_render_as_one_combined_block():
         start=time(13, 0),
         end=time(15, 0),
         times=(TimeVariant(time(13, 0), time(15, 0), 5),),
-        rooms=(RoomVariant("sala B 203", 5),),
         count=5,
-        lane=0,
-        lanes=2,
     )
     right = Cluster(
         weekday=3,
@@ -95,10 +92,7 @@ def test_colliding_clusters_render_as_one_combined_block():
         start=time(14, 0),
         end=time(16, 0),
         times=(TimeVariant(time(14, 0), time(16, 0), 5),),
-        rooms=(RoomVariant("sala B 203", 5),),
         count=5,
-        lane=1,
-        lanes=2,
     )
     boxes: list[tuple[float, float, float, float]] = []
     captured: list[list[tuple[tuple[int, ...], list]]] = []

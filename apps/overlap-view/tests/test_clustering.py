@@ -1,10 +1,9 @@
-"""Clustering tests: merging, splitting, counting, and lane assignment."""
+"""Clustering tests: merging, splitting, and counting."""
 
 from datetime import date, time
 
 from overlap_view.clustering import (
     Cluster,
-    RoomVariant,
     TimeVariant,
     cluster_events,
     overlap_components,
@@ -53,7 +52,6 @@ def test_stable_class_merges_into_one_counted_cluster():
             start=time(9, 40),
             end=time(12, 5),
             times=(TimeVariant(time(9, 40), time(12, 5), 3),),
-            rooms=(RoomVariant("sala D 319", 3),),
             count=3,
         )
     ]
@@ -85,41 +83,6 @@ def test_touching_and_chained_instances_merge():
         (time(14, 50), time(15, 50), 1),
         (time(15, 50), time(16, 0), 1),
     ]
-
-
-def test_rooms_counted_separately_sorted_by_count():
-    events = [
-        make_event(0, time(9, 40), time(12, 5), room="bud.D D - 02 - SALA BALETOWA"),
-        make_event(0, time(9, 40), time(12, 5), week=1),
-        make_event(0, time(9, 40), time(12, 5), week=2),
-    ]
-    (cluster,) = cluster_events(events)
-    assert [(v.room, v.count) for v in cluster.rooms] == [
-        ("sala D 319", 2),
-        ("sala D -02 · baletowa", 1),
-    ]
-
-
-def test_colliding_subjects_share_the_column_side_by_side():
-    events = [
-        make_event(3, time(13, 0), time(15, 25), subject="Antropologia", form="Wyk"),
-        make_event(
-            3,
-            time(14, 30),
-            time(16, 30),
-            subject="Bezpieczeństwo lokalne",
-            form="",
-        ),
-    ]
-    first, second = cluster_events(events)
-    assert (first.lane, first.lanes) == (0, 2)
-    assert (second.lane, second.lanes) == (1, 2)
-
-
-def test_non_colliding_days_keep_full_width():
-    events = [make_event(0, time(9, 40), time(12, 5))]
-    (cluster,) = cluster_events(events)
-    assert (cluster.lane, cluster.lanes) == (0, 1)
 
 
 def test_weekend_events_are_skipped():

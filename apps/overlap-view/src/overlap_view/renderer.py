@@ -153,7 +153,6 @@ def _draw_cluster(
             _time_label(variant.start, variant.end, variant.count)
             for variant in cluster.times
         ],
-        [],
         text_w,
         block_h,
         measure,

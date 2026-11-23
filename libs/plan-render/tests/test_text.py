@@ -29,11 +29,9 @@ def _layout(
 
 
 def _cluster_layout(
-    subject: str, times: list[str], rooms: list[str], text_w: float, minutes: float
+    subject: str, times: list[str], text_w: float, minutes: float
 ) -> list[BlockLine]:
-    return layout_cluster(
-        subject, times, rooms, text_w, minutes * HOUR_H / 60, _fake_measure
-    )
+    return layout_cluster(subject, times, text_w, minutes * HOUR_H / 60, _fake_measure)
 
 
 def _choice_layout(
@@ -93,35 +91,30 @@ def test_empty_room_renders_time_only():
     assert lines[1][0] == "10:00–11:30"
 
 
-def test_cluster_lists_times_then_rooms():
+def test_cluster_lists_times():
     lines = _cluster_layout(
         "Świadomość ciała",
         ["14:40–17:05 ×3", "15:00–17:25 ×1"],
-        ["sala D -02 ×4"],
         200,
         165,
     )
-    assert [kind for _, kind in lines] == ["subject", "meta", "meta", "room"]
+    assert [kind for _, kind in lines] == ["subject", "meta", "meta"]
     assert lines[1][0] == "14:40–17:05 ×3"
     assert lines[2][0] == "15:00–17:25 ×1"
-    assert lines[3][0] == "sala D -02 ×4"
 
 
-def test_cluster_drops_rooms_before_times_when_tight():
+def test_cluster_drops_times_when_tight():
     lines = _cluster_layout(
         "Świadomość ciała",
         ["14:40–17:05 ×3", "15:00–17:25 ×1"],
-        ["sala D -02 ×4"],
         200,
-        70,
+        40,
     )
-    assert [kind for _, kind in lines] == ["subject", "meta", "meta"]
+    assert [kind for _, kind in lines] == ["subject"]
 
 
 def test_cluster_tiny_block_yields_no_lines():
-    assert (
-        _cluster_layout("Wymowa", ["10:00–10:20 ×1"], ["sala D 319 ×1"], 200, 15) == []
-    )
+    assert _cluster_layout("Wymowa", ["10:00–10:20 ×1"], 200, 15) == []
 
 
 def test_room_lines_start_after_a_gap():
@@ -177,7 +170,7 @@ def test_choice_truncates_overlong_lines():
 
 def test_choice_wraps_subjects_like_cluster():
     clustered = _cluster_layout(
-        "Elementarne zadania aktorskie", ["10:00–12:25 ×1"], [], 150, 145
+        "Elementarne zadania aktorskie", ["10:00–12:25 ×1"], 150, 145
     )
     (section,) = _choice_layout(
         [("Elementarne zadania aktorskie", ["10:00–12:25 ×1"])], 150, 145

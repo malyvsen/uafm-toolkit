@@ -1,11 +1,10 @@
 """Group weekly events into overlapping weekday clusters for the typical week."""
 
 from collections import Counter
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import time
 
 from plan_parser import Event
-from plan_render.text import format_room
 
 
 @dataclass(frozen=True)
@@ -18,20 +17,11 @@ class TimeVariant:
 
 
 @dataclass(frozen=True)
-class RoomVariant:
-    """One distinct room with its occurrence count."""
-
-    room: str
-    count: int
-
-
-@dataclass(frozen=True)
 class Cluster:
     """Overlapping instances of one class on one weekday.
 
     The block spans `start` to `end`; `times` lists the distinct time variants
-    sorted by start, `rooms` the distinct rooms sorted by count. `lane` and
-    `lanes` place colliding clusters side by side within the column.
+    sorted by start.
     """
 
     weekday: int
@@ -40,14 +30,11 @@ class Cluster:
     start: time
     end: time
     times: tuple[TimeVariant, ...]
-    rooms: tuple[RoomVariant, ...]
     count: int
-    lane: int = 0
-    lanes: int = 1
 
 
 def cluster_events(events: list[Event]) -> list[Cluster]:
-    """Merge each weekday's class instances into overlap clusters with lanes."""
+    """Merge each weekday's class instances into overlap clusters."""
     groups: dict[tuple[int, str, str], list[Event]] = {}
     for event in events:
         weekday = event.date.weekday()
@@ -57,7 +44,7 @@ def cluster_events(events: list[Event]) -> list[Cluster]:
     clusters = [
         cluster for key, group in groups.items() for cluster in _merge(key, group)
     ]
-    return _assign_lanes(clusters)
+    return sorted(clusters, key=lambda c: (c.weekday, c.start, c.end, c.subject))
 
 
 def overlap_components(clusters: list[Cluster]) -> list[list[Cluster]]:
@@ -98,11 +85,6 @@ def _build(weekday: int, subject: str, form: str, members: list[Event]) -> Clust
         TimeVariant(start, end, count)
         for (start, end), count in sorted(time_counts.items())
     )
-    room_counts = Counter(format_room(e.room) for e in members if e.room.strip())
-    rooms = tuple(
-        RoomVariant(room, count)
-        for room, count in sorted(room_counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    )
     return Cluster(
         weekday=weekday,
         subject=subject,
@@ -110,41 +92,8 @@ def _build(weekday: int, subject: str, form: str, members: list[Event]) -> Clust
         start=min(e.start for e in members),
         end=max(e.end for e in members),
         times=times,
-        rooms=rooms,
         count=len(members),
     )
-
-
-def _assign_lanes(clusters: list[Cluster]) -> list[Cluster]:
-    """Split colliding clusters of each weekday into side-by-side lanes."""
-    by_day: dict[int, list[Cluster]] = {}
-    for cluster in clusters:
-        by_day.setdefault(cluster.weekday, []).append(cluster)
-    placed: list[Cluster] = []
-    for weekday in sorted(by_day):
-        day_clusters = sorted(
-            by_day[weekday], key=lambda c: (c.start, c.end, c.subject)
-        )
-        for component in _components(day_clusters):
-            lane_ends: list[time] = []
-            assigned: list[tuple[Cluster, int]] = []
-            for cluster in component:
-                lane = next(
-                    (
-                        i
-                        for i, occupied_until in enumerate(lane_ends)
-                        if occupied_until <= cluster.start
-                    ),
-                    len(lane_ends),
-                )
-                if lane == len(lane_ends):
-                    lane_ends.append(cluster.end)
-                else:
-                    lane_ends[lane] = cluster.end
-                assigned.append((cluster, lane))
-            for cluster, lane in assigned:
-                placed.append(replace(cluster, lane=lane, lanes=len(lane_ends)))
-    return sorted(placed, key=lambda c: (c.weekday, c.start, c.end, c.subject))
 
 
 def _components(day_clusters: list[Cluster]) -> list[list[Cluster]]:
