@@ -4,7 +4,8 @@ Library that drives Firefox to download the study-plan PDF, logging in with cred
 
 ## Setup
 
-Copy the repo-root `.env.example` to `.env` and fill in `UAFM_USERNAME`, `UAFM_PASSWORD`, and `UAFM_TOTP_SECRET` (the authenticator secret from 2FA enrollment, not a one-time code).
+`task init` at the repo root creates `.env` from `.env.example` when
+missing. Fill in `UAFM_USERNAME`, `UAFM_PASSWORD`, and `UAFM_TOTP_SECRET` (the authenticator secret from 2FA enrollment, not a one-time code).
 Verify the authenticator wiring with:
 
 ```sh

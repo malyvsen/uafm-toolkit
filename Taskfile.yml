@@ -6,6 +6,7 @@ tasks:
     deps: [prereqs]
     cmds:
       - git config core.hooksPath scripts/git-hooks
+      - test -f .env || cp .env.example .env
       - uv sync --all-packages --all-groups --all-extras --locked
 
   check:
@@ -15,8 +16,14 @@ tasks:
       PROJECTS:
         sh: find . -mindepth 2 -name Taskfile.yml -exec dirname {} \;
     cmds:
+      - task: check-env
       - for: { var: PROJECTS, as: PROJECT }
         cmd: task -d {{.PROJECT}} check
+
+  check-env:
+    desc: Verify .env credentials are filled in
+    cmds:
+      - bash scripts/check-env.sh
 
   fix:
     desc: Apply safe formatting and lint fixes
