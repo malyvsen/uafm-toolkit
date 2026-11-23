@@ -8,13 +8,30 @@ year, and the plan PDF only contains days that actually hold classes anyway,
 so approximations are sufficient — explicit --date-from/--date-to wins.
 """
 
+from dataclasses import dataclass
 from datetime import date
+from typing import Literal
 
 # Approximate teaching periods as (month, day); winter spans the year boundary.
 WINTER_START = (10, 1)
 WINTER_END = (1, 31)
 SUMMER_START = (3, 1)
 SUMMER_END = (6, 30)
+
+
+@dataclass(frozen=True)
+class SemesterIdentity:
+    """Academic-year start plus winter/summer kind for a calendar date."""
+
+    kind: Literal["zimowy", "letni"]
+    start_year: int
+
+
+def semester_identity(day: date) -> SemesterIdentity:
+    """Classify `day` into its semester (Feb → summer, Jul–Sep → winter)."""
+    kind: Literal["zimowy", "letni"] = "letni" if 2 <= day.month <= 6 else "zimowy"
+    start_year = day.year if day.month >= 7 else day.year - 1
+    return SemesterIdentity(kind=kind, start_year=start_year)
 
 
 def semester_remainder(today: date) -> tuple[date, date]:
