@@ -19,19 +19,26 @@ SUMMER_START = (3, 1)
 SUMMER_END = (6, 30)
 
 
+SemesterKind = Literal["zimowy", "letni"]
+
+# February already points at the upcoming summer; July–September at the upcoming winter.
+SUMMER_MONTHS = range(2, 7)
+ACADEMIC_YEAR_START_MONTH = 7
+
+
 @dataclass(frozen=True)
 class SemesterIdentity:
     """Academic-year start plus winter/summer kind for a calendar date."""
 
-    kind: Literal["zimowy", "letni"]
     start_year: int
+    kind: SemesterKind
 
 
 def semester_identity(day: date) -> SemesterIdentity:
     """Classify `day` into its semester (Feb → summer, Jul–Sep → winter)."""
-    kind: Literal["zimowy", "letni"] = "letni" if 2 <= day.month <= 6 else "zimowy"
-    start_year = day.year if day.month >= 7 else day.year - 1
-    return SemesterIdentity(kind=kind, start_year=start_year)
+    kind: SemesterKind = "letni" if day.month in SUMMER_MONTHS else "zimowy"
+    start_year = day.year if day.month >= ACADEMIC_YEAR_START_MONTH else day.year - 1
+    return SemesterIdentity(start_year=start_year, kind=kind)
 
 
 def semester_remainder(today: date) -> tuple[date, date]:

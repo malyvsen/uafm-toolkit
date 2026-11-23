@@ -2,6 +2,8 @@
 
 from datetime import date
 
+import pytest
+
 from overlap_view.semester import (
     SemesterIdentity,
     semester_identity,
@@ -41,42 +43,24 @@ def test_break_points_at_the_upcoming_winter():
     )
 
 
-def test_autumn_months_are_winter_of_the_same_year():
-    assert semester_identity(date(2026, 10, 19)) == SemesterIdentity(
-        kind="zimowy", start_year=2026
-    )
-    assert semester_identity(date(2026, 11, 5)) == SemesterIdentity(
-        kind="zimowy", start_year=2026
-    )
-    assert semester_identity(date(2026, 12, 31)) == SemesterIdentity(
-        kind="zimowy", start_year=2026
-    )
-
-
-def test_january_is_winter_of_the_previous_year():
-    assert semester_identity(date(2027, 1, 10)) == SemesterIdentity(
-        kind="zimowy", start_year=2026
-    )
-
-
-def test_spring_months_are_summer_of_the_previous_year():
-    for month in (2, 3, 4, 5, 6):
-        assert semester_identity(date(2027, month, 15)) == SemesterIdentity(
-            kind="letni", start_year=2026
-        )
-
-
-def test_summer_break_is_winter_of_the_same_year():
-    for month in (7, 8, 9):
-        assert semester_identity(date(2027, month, 15)) == SemesterIdentity(
-            kind="zimowy", start_year=2027
-        )
-
-
-def test_semester_identity_is_stable_across_the_year_boundary():
-    assert semester_identity(date(2026, 10, 19)).start_year == 2026
-    assert semester_identity(date(2027, 1, 10)).start_year == 2026
-    assert semester_identity(date(2027, 3, 15)).start_year == 2026
-    assert semester_identity(date(2027, 8, 15)) == SemesterIdentity(
-        kind="zimowy", start_year=2027
-    )
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2026, 10, 19), SemesterIdentity(start_year=2026, kind="zimowy")),
+        (date(2026, 11, 5), SemesterIdentity(start_year=2026, kind="zimowy")),
+        (date(2026, 12, 31), SemesterIdentity(start_year=2026, kind="zimowy")),
+        (date(2027, 1, 10), SemesterIdentity(start_year=2026, kind="zimowy")),
+        (date(2027, 2, 15), SemesterIdentity(start_year=2026, kind="letni")),
+        (date(2027, 3, 15), SemesterIdentity(start_year=2026, kind="letni")),
+        (date(2027, 4, 15), SemesterIdentity(start_year=2026, kind="letni")),
+        (date(2027, 5, 15), SemesterIdentity(start_year=2026, kind="letni")),
+        (date(2027, 6, 15), SemesterIdentity(start_year=2026, kind="letni")),
+        (date(2027, 7, 15), SemesterIdentity(start_year=2027, kind="zimowy")),
+        (date(2027, 8, 15), SemesterIdentity(start_year=2027, kind="zimowy")),
+        (date(2027, 9, 15), SemesterIdentity(start_year=2027, kind="zimowy")),
+    ],
+)
+def test_semester_identity_follows_the_academic_year(
+    day: date, expected: SemesterIdentity
+):
+    assert semester_identity(day) == expected

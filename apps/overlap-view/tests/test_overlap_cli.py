@@ -12,13 +12,13 @@ from PIL import Image
 
 from overlap_view.cli import (
     CustomRange,
+    DefaultRange,
     OverlapError,
-    SemesterDefault,
     custom_output_name,
+    default_output_name,
     main,
     render_overlap,
     resolve_date_range,
-    semester_output_name,
 )
 from overlap_view.semester import SemesterIdentity, semester_remainder
 from plan_downloader import Credentials
@@ -69,7 +69,7 @@ def test_default_naming_uses_academic_year_and_kind(
     tmp_path: Path, two_events: list[Event]
 ):
     expected = tmp_path / "plan-2026-2027-semestr-zimowy.png"
-    date_range = SemesterDefault(date(2026, 10, 21), date(2027, 1, 31))
+    date_range = DefaultRange(date(2026, 10, 21), date(2027, 1, 31))
     assert render_overlap(two_events, tmp_path, date_range) == expected
 
 
@@ -77,13 +77,13 @@ def test_winter_and_summer_defaults_differ(tmp_path: Path, two_events: list[Even
     winter = render_overlap(
         two_events,
         tmp_path,
-        SemesterDefault(date(2026, 10, 21), date(2027, 1, 31)),
+        DefaultRange(date(2026, 10, 21), date(2027, 1, 31)),
     )
     summer_event = replace(two_events[0], date=date(2027, 4, 5))
     summer = render_overlap(
         [summer_event],
         tmp_path,
-        SemesterDefault(date(2027, 4, 5), date(2027, 6, 30)),
+        DefaultRange(date(2027, 4, 5), date(2027, 6, 30)),
     )
     assert winter.name == "plan-2026-2027-semestr-zimowy.png"
     assert summer.name == "plan-2026-2027-semestr-letni.png"
@@ -91,7 +91,7 @@ def test_winter_and_summer_defaults_differ(tmp_path: Path, two_events: list[Even
 
 
 def test_rerun_overwrites_silently(tmp_path: Path, two_events: list[Event]):
-    date_range = SemesterDefault(date(2026, 10, 21), date(2027, 1, 31))
+    date_range = DefaultRange(date(2026, 10, 21), date(2027, 1, 31))
     first = render_overlap(two_events, tmp_path, date_range)
     second = render_overlap(two_events, tmp_path, date_range)
     assert first == second
@@ -117,31 +117,36 @@ def test_custom_output_name_encodes_range():
     )
 
 
-def test_semester_output_name_encodes_year_and_kind():
-    assert (
-        semester_output_name(SemesterIdentity(kind="zimowy", start_year=2026))
-        == "plan-2026-2027-semestr-zimowy.png"
-    )
-    assert (
-        semester_output_name(SemesterIdentity(kind="letni", start_year=2026))
-        == "plan-2026-2027-semestr-letni.png"
-    )
+@pytest.mark.parametrize(
+    ("identity", "expected"),
+    [
+        (
+            SemesterIdentity(start_year=2026, kind="zimowy"),
+            "plan-2026-2027-semestr-zimowy.png",
+        ),
+        (
+            SemesterIdentity(start_year=2026, kind="letni"),
+            "plan-2026-2027-semestr-letni.png",
+        ),
+    ],
+)
+def test_default_output_name_encodes_year_and_kind(
+    identity: SemesterIdentity, expected: str
+):
+    assert default_output_name(identity) == expected
 
 
 def test_empty_events_fail(tmp_path: Path):
     with pytest.raises(OverlapError):
         render_overlap(
-            [], tmp_path, SemesterDefault(date(2026, 10, 21), date(2027, 1, 31))
+            [], tmp_path, DefaultRange(date(2026, 10, 21), date(2027, 1, 31))
         )
 
 
 def test_default_range_is_the_remaining_semester():
     today = date(2026, 10, 21)
-    assert resolve_date_range(None, None, today=today) == SemesterDefault(
+    assert resolve_date_range(None, None, today=today) == DefaultRange(
         date(2026, 10, 21), date(2027, 1, 31)
-    )
-    assert resolve_date_range(None, None, today=today) == SemesterDefault(
-        *semester_remainder(today)
     )
 
 

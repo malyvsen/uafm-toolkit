@@ -31,7 +31,7 @@ class OverlapError(Exception):
 
 
 @dataclass(frozen=True)
-class SemesterDefault:
+class DefaultRange:
     """Default run: the remaining teaching period."""
 
     start: date
@@ -40,7 +40,7 @@ class SemesterDefault:
 
 @dataclass(frozen=True)
 class CustomRange:
-    """Explicit run: user-supplied dates."""
+    """Custom run: user-supplied dates."""
 
     start: date
     end: date
@@ -66,18 +66,18 @@ def main(
 
 def resolve_date_range(
     date_from: date | None, date_to: date | None, *, today: date
-) -> SemesterDefault | CustomRange:
-    """Fill missing dates with the remaining teaching period (see semester)."""
+) -> DefaultRange | CustomRange:
+    """Resolve explicit dates or fall back to the remaining teaching period."""
     if date_from is None and date_to is None:
         start, end = semester_remainder(today)
-        return SemesterDefault(start, end)
+        return DefaultRange(start, end)
     if date_from is None or date_to is None:
         raise OverlapError("Podaj obie daty: --date-from i --date-to.")
     return CustomRange(date_from, date_to)
 
 
 def render_overlap(
-    events: list[Event], output_dir: Path, date_range: SemesterDefault | CustomRange
+    events: list[Event], output_dir: Path, date_range: DefaultRange | CustomRange
 ) -> Path:
     """Render every event as one typical-week PNG and return its path."""
     clusters = cluster_events(events)
@@ -90,8 +90,8 @@ def render_overlap(
     output_dir.mkdir(parents=True, exist_ok=True)
     date_from, date_to = min(dates), max(dates)
     match date_range:
-        case SemesterDefault():
-            filename = semester_output_name(semester_identity(date_from))
+        case DefaultRange():
+            filename = default_output_name(semester_identity(date_from))
         case CustomRange():
             filename = custom_output_name(date_from, date_to)
     path = output_dir / filename
@@ -104,7 +104,7 @@ def render_overlap(
     return path
 
 
-def semester_output_name(identity: SemesterIdentity) -> str:
+def default_output_name(identity: SemesterIdentity) -> str:
     """Semester PNG name, e.g. plan-2026-2027-semestr-zimowy.png."""
     return f"plan-{identity.start_year}-{identity.start_year + 1}-semestr-{identity.kind}.png"
 

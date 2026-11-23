@@ -14,9 +14,9 @@ task run -- --date-from 2026-10-01 --date-to 2027-01-31 --output-dir timetables
 Without dates, the remaining UAFM full-time teaching period is used (see
 `semester.py`). Credentials come from `.env` (see `libs/plan-downloader`).
 Everything stays in memory: only one PNG is written (default output dir
-`~/Downloads`): `plan-<START>-<END>-semestr-<kind>.png` for default runs
+`~/Downloads`): `plan-<YEAR>-<YEAR+1>-semestr-<kind>.png` for default runs
 (e.g. `plan-2026-2027-semestr-zimowy.png`, `plan-2026-2027-semestr-letni.png`,
-from the earliest event's semester) and `plan-<FROM>-<TO>.png` for explicit
+from the earliest event's semester) and `plan-<FROM>-<TO>.png` for custom
 `--date-from/--date-to` runs (e.g. `plan-2026-10-19-2026-10-30.png`, from
 actual event min/max dates).
 
