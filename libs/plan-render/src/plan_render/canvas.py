@@ -164,18 +164,17 @@ def draw_block(
     lines: list[BlockLine],
     alpha: float = 1.0,
 ) -> None:
-    """Render one frosted block, fading the whole block uniformly by `alpha`.
+    """Render one frosted block, keeping borders, spine, and text opaque.
 
-    The frost melts into `base`; borders, spine, and text go onto `overlay`.
-    Rare clusters (`alpha` below 1) look pale against the background, while
-    every-week clusters stay fully solid. Room lines render dimmer than time
-    lines, with a gap separating the two groups.
+    The frost melts into `base` with strength `alpha`; borders, spine, and
+    text go onto `overlay` fully opaque so rare clusters stay legible. Room
+    lines render dimmer than time lines, with a gap separating the two groups.
     """
     left, top, right, bottom = (int(v) for v in box)
     width, height = right - left, bottom - top
     if width <= 0 or height <= 0:
         return
-    frost(base, (left, top, right, bottom))
+    frost(base, (left, top, right, bottom), alpha)
     region = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(region)
     draw.rounded_rectangle(
@@ -202,9 +201,6 @@ def draw_block(
                 else style.ROOM_GREY
             ),
         )
-    if alpha < 1.0:
-        scaled = region.getchannel("A").point(lambda v: min(255, round(v * alpha)))
-        region.putalpha(scaled)
     overlay.paste(region, (left, top), region)
 
 

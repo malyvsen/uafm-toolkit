@@ -284,7 +284,16 @@ def _legend_bar_bounds(
                 matches.append((x, y))
     assert matches, "no legend bar found"
     counts = Counter(x for x, _ in matches)
-    dense = {x for x, count in counts.items() if count >= 15}
+    dense = sorted({x for x, count in counts.items() if count >= 15})
     assert dense, "no dense legend bar found"
-    ys = [y for x, y in matches if x in dense]
-    return min(dense), max(dense), min(ys), max(ys)
+    # Grey spine tones also catch antialiased text elsewhere in the header;
+    # the legend bar is the rightmost contiguous run of dense columns.
+    runs: list[list[int]] = [[dense[0]]]
+    for x in dense[1:]:
+        if x == runs[-1][-1] + 1:
+            runs[-1].append(x)
+        else:
+            runs.append([x])
+    bar = set(runs[-1])
+    ys = [y for x, y in matches if x in bar]
+    return min(bar), max(bar), min(ys), max(ys)

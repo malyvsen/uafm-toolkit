@@ -1,8 +1,8 @@
 """Shared graphite-frost visuals: palette, geometry, and timetable labels."""
 
 OFF_WHITE = (244, 245, 246)
-SOFT_GREY = (185, 192, 201)
-ROOM_GREY = (150, 157, 168)
+SOFT_GREY = (210, 215, 222)
+ROOM_GREY = (185, 192, 201)
 AXIS_LABEL = (244, 245, 246, 160)
 HOUR_LINE = (255, 255, 255, 14)
 EVENT_BORDER = (255, 255, 255, 90)

@@ -8,7 +8,7 @@ from plan_render import style
 
 
 def apply_grain(
-    image: Image.Image, seed: int, sigma: int = 28, opacity: float = 0.22
+    image: Image.Image, seed: int, sigma: int = 28, opacity: float = 0.14
 ) -> Image.Image:
     """Overlay deterministic monochrome film grain over the whole image."""
     width, height = image.size
@@ -22,8 +22,10 @@ def apply_grain(
     return Image.blend(image, overlaid, opacity)
 
 
-def frost(canvas: Image.Image, box: tuple[int, int, int, int]) -> None:
-    """Frost an event block's background in place with blur + white."""
+def frost(
+    canvas: Image.Image, box: tuple[int, int, int, int], alpha: float = 1.0
+) -> None:
+    """Frost an event block's background in place; `alpha` scales the white."""
     left, top, right, bottom = (int(v) for v in box)
     width, height = right - left, bottom - top
     if width <= 0 or height <= 0:
@@ -31,7 +33,8 @@ def frost(canvas: Image.Image, box: tuple[int, int, int, int]) -> None:
     region = canvas.crop((left, top, right, bottom)).filter(
         ImageFilter.GaussianBlur(style.EVENT_BLUR_RADIUS)
     )
-    white = Image.new("RGBA", (width, height), (255, 255, 255, style.EVENT_WHITE_ALPHA))
+    white_alpha = round(style.EVENT_WHITE_ALPHA * alpha)
+    white = Image.new("RGBA", (width, height), (255, 255, 255, white_alpha))
     frosted = Image.alpha_composite(region.convert("RGBA"), white)
     mask = Image.new("L", (width, height), 0)
     ImageDraw.Draw(mask).rounded_rectangle(
