@@ -4,13 +4,12 @@ import random
 import re
 from collections.abc import Callable
 from datetime import date, time, timedelta
-from functools import cache
-from pathlib import Path
 from typing import Literal
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from calendar_grid.background import background_for_week
+from calendar_grid.fonts import font
 from plan_parser import Event
 
 OFF_WHITE = (244, 245, 246)
@@ -115,13 +114,6 @@ BlockLine = tuple[str, LineKind]
 HourSegment = tuple[int, int]
 BlockMeasure = Callable[[str, LineKind], float]
 WidthMeasure = Callable[[str], float]
-
-_FONT_DIR = Path("/System/Library/Fonts/Supplemental")
-_FONT_FILES = {
-    "regular": "Georgia.ttf",
-    "bold": "Georgia Bold.ttf",
-    "italic": "Georgia Italic.ttf",
-}
 
 _BUILDING_RE = re.compile(r"^bud\.\S+\s*")
 _GENERIC_ROOM_WORDS = {"SALA", "SALE", "PRACOWNIA", "AULA", "HALA"}
@@ -232,8 +224,8 @@ def _draw_header(
     last: date,
     events: list[Event],
 ) -> None:
-    title = _font("bold", TITLE_SIZE)
-    subtitle_font = _font("regular", SUBTITLE_SIZE)
+    title = font("bold", TITLE_SIZE)
+    subtitle_font = font("regular", SUBTITLE_SIZE)
     draw.text((MARGIN_X, MARGIN_TOP), "Plan zajęć", font=title, fill=OFF_WHITE)
     subtitle = _week_range(monday, last)
     subtitle_top = MARGIN_TOP + TITLE_H + TITLE_GAP
@@ -265,9 +257,9 @@ def _draw_legend(
     ordered = legend_forms(events)
     if not ordered:
         return
-    font = _font("regular", LEGEND_SIZE)
+    label_font = font("regular", LEGEND_SIZE)
     styled = [FORM_STYLES.get(form, (form, UNKNOWN_SPINE)) for form in ordered]
-    longest = max(draw.textlength(label, font=font) for label, _ in styled)
+    longest = max(draw.textlength(label, font=label_font) for label, _ in styled)
     block_x = width - MARGIN_X - LEGEND_SPINE_W - LEGEND_GAP - longest
     total_h = len(styled) * (LEGEND_BAR_H + LEGEND_GAP) - LEGEND_GAP
     y = subtitle_bottom - total_h
@@ -278,7 +270,7 @@ def _draw_legend(
         draw.text(
             (block_x + LEGEND_SPINE_W + LEGEND_GAP, y + LEGEND_BAR_H / 2),
             label,
-            font=font,
+            font=label_font,
             fill=OFF_WHITE,
             anchor="lm",
         )
@@ -292,7 +284,7 @@ def _draw_grid(
     segments: list[HourSegment],
 ) -> None:
     left = col_x(0)
-    axis_font = _font("regular", AXIS_SIZE)
+    axis_font = font("regular", AXIS_SIZE)
     for hour in range(START_HOUR, END_HOUR + 1):
         y = grid_top + (hour - START_HOUR) * HOUR_H
         draw.text(
@@ -304,7 +296,7 @@ def _draw_grid(
         )
     for x, y in segments:
         draw.line([(x, y), (x + COL_W, y)], fill=HOUR_LINE, width=2)
-    day_font = _font("regular", DAY_SIZE)
+    day_font = font("regular", DAY_SIZE)
     for i, day in enumerate(days):
         x = col_x(i)
         draw.text(
@@ -341,8 +333,8 @@ def _draw_event(
     block_h = bottom - top
     time_range = f"{event.start.hour}:{event.start.minute:02d}–{event.end.hour}:{event.end.minute:02d}"
     room = format_room(event.room)
-    subject_font = _font("bold", SUBJECT_SIZE)
-    meta_font = _font("italic", META_SIZE)
+    subject_font = font("bold", SUBJECT_SIZE)
+    meta_font = font("italic", META_SIZE)
 
     def measure(text: str, kind: LineKind) -> float:
         return draw.textlength(
@@ -461,11 +453,3 @@ def _truncate(text: str, max_width: float, measure: WidthMeasure) -> str:
     while text and measure(text + "…") > max_width:
         text = text[:-1]
     return text + "…"
-
-
-@cache
-def _font(style: str, size: int) -> ImageFont.FreeTypeFont:
-    path = _FONT_DIR / _FONT_FILES[style]
-    if not path.exists():
-        raise RuntimeError(f"System font not found: {path}")
-    return ImageFont.truetype(str(path), size)
