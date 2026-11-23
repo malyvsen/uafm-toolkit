@@ -14,7 +14,7 @@ LineKind = Literal["subject", "meta", "room"]
 BlockLine = tuple[str, LineKind]
 BlockMeasure = Callable[[str, LineKind], float]
 WidthMeasure = Callable[[str], float]
-ChoiceAlternative = tuple[str, list[str]]
+CombinedAlternative = tuple[str, list[str]]
 
 _BUILDING_RE = re.compile(r"^bud\.\S+\s*")
 _GENERIC_ROOM_WORDS = {"SALA", "SALE", "PRACOWNIA", "AULA", "HALA"}
@@ -96,25 +96,12 @@ def layout_cluster(
     this only wraps the subject, truncates variants, and drops times when
     space is tight.
     """
-
-    subject_options = _subject_options(subject, text_w, measure)
-
-    def meta_width(text: str) -> float:
-        return measure(text, "meta")
-
-    time_lines: list[BlockLine] = [
-        (_truncate(time, text_w, meta_width), "meta") for time in times
-    ]
-
-    for subj in subject_options:
-        if _fits([*subj, *time_lines], block_h):
-            return [*subj, *time_lines]
-    subj_1 = subject_options[-1]
-    return subj_1 if _fits(subj_1, block_h) else []
+    sections = layout_combined([(subject, times)], text_w, block_h, measure)
+    return sections[0] if sections else []
 
 
-def layout_choice_block(
-    alternatives: list[ChoiceAlternative],
+def layout_combined(
+    alternatives: list[CombinedAlternative],
     text_w: float,
     block_h: float,
     measure: BlockMeasure,
@@ -122,8 +109,8 @@ def layout_choice_block(
     """Lay out colliding classes as one combined block, one section per class.
 
     Each alternative is a (subject, time labels) pair; time labels already carry
-    counts (`13:00–15:25 ×4`). Subjects wrap exactly like `layout_cluster`;
-    sections share the block with a `SEPARATOR_GAP` divider between them.
+    counts (`13:00–15:25 ×4`). Subjects wrap to one or two lines; sections
+    share the block with a `SECTION_GAP` divider between them.
     Falls back from full sections to subjects-only, then to an empty block.
     """
 
@@ -145,28 +132,28 @@ def layout_choice_block(
         sections = [
             [*subj, *times] for subj, times in zip(subjects, time_lines, strict=True)
         ]
-        if _fits_choice(sections, block_h):
+        if _fits_sections(sections, block_h):
             return sections
     for subjects in itertools.product(*subject_options):
         sections = [list(subj) for subj in subjects]
-        if _fits_choice(sections, block_h):
+        if _fits_sections(sections, block_h):
             return sections
     return []
 
 
-def place_choice_sections(
+def place_sections(
     sections: list[list[BlockLine]],
 ) -> list[list[tuple[str, LineKind, int]]]:
-    """Assign each choice-block line a y offset, with gaps between sections."""
+    """Assign each combined-block line a y offset, with gaps between sections."""
     placed_sections: list[list[tuple[str, LineKind, int]]] = []
     y = style.BLOCK_PAD_Y
     for index, section in enumerate(sections):
         if index > 0:
-            y += style.SEPARATOR_GAP
+            y += style.SECTION_GAP
         placed: list[tuple[str, LineKind, int]] = []
         for text, kind in section:
             placed.append((text, kind, y))
-            y += _line_step(kind)
+            y += line_step(kind)
         placed_sections.append(placed)
     return placed_sections
 
@@ -180,7 +167,7 @@ def place_lines(lines: list[BlockLine]) -> list[tuple[str, LineKind, int]]:
         if kind == "room" and previous != "room":
             y += style.ROOM_GAP
         placed.append((text, kind, y))
-        y += _line_step(kind)
+        y += line_step(kind)
         previous = kind
     return placed
 
@@ -189,21 +176,26 @@ def _fits(lines: list[BlockLine], block_h: float) -> bool:
     if not lines:
         return True
     _, kind, dy = place_lines(lines)[-1]
-    return dy + _line_step(kind) - style.LINE_SLACK <= block_h - style.BLOCK_PAD_Y
+    return _fits_bottom(dy, kind, block_h)
 
 
-def _fits_choice(sections: list[list[BlockLine]], block_h: float) -> bool:
+def _fits_sections(sections: list[list[BlockLine]], block_h: float) -> bool:
     if not sections:
         return True
-    placed = place_choice_sections(sections)
+    placed = place_sections(sections)
     non_empty = [section for section in placed if section]
     if not non_empty:
         return True
     _, kind, dy = non_empty[-1][-1]
-    return dy + _line_step(kind) - style.LINE_SLACK <= block_h - style.BLOCK_PAD_Y
+    return _fits_bottom(dy, kind, block_h)
 
 
-def _line_step(kind: LineKind) -> int:
+def _fits_bottom(dy: int, kind: LineKind, block_h: float) -> bool:
+    return dy + line_step(kind) - style.LINE_SLACK <= block_h - style.BLOCK_PAD_Y
+
+
+def line_step(kind: LineKind) -> int:
+    """Vertical advance of one laid-out line of `kind`."""
     return style.SUBJECT_STEP if kind == "subject" else style.META_STEP
 
 

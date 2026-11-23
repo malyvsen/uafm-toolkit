@@ -19,7 +19,6 @@ def make_event(
     end: time,
     subject: str = "Wymowa",
     form: str = "War",
-    room: str = "bud.D D 319 - PRACOWNIA AKTORSKA",
     week: int = 0,
 ) -> Event:
     return Event(
@@ -30,7 +29,7 @@ def make_event(
         subject=subject,
         form=form,
         groups="",
-        room=room,
+        room="bud.D D 319 - PRACOWNIA AKTORSKA",
         lecturer="",
         credit_form="",
         tracks="",

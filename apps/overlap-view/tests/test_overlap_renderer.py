@@ -13,17 +13,17 @@ from plan_render import canvas as canvas_module
 from plan_render.canvas import col_x
 from plan_render.style import (
     BLOCK_PAD_X,
-    CHOICE_CHIP_H,
     COL_W,
     GRID_TOP,
     HOUR_H,
     META_STEP,
+    SECTION_CHIP_H,
     START_HOUR,
     SUBJECT_STEP,
     UNKNOWN_SPINE,
     WYK_ORANGE,
 )
-from plan_render.text import place_choice_sections
+from plan_render.text import place_sections
 
 FIXTURES = (
     Path(__file__).resolve().parents[3] / "libs" / "plan-parser" / "tests" / "fixtures"
@@ -94,24 +94,11 @@ def test_colliding_clusters_render_as_one_combined_block():
         times=(TimeVariant(time(14, 0), time(16, 0), 5),),
         count=5,
     )
-    boxes: list[tuple[float, float, float, float]] = []
-    captured: list[list[tuple[tuple[int, ...], list]]] = []
-    block_calls: list[tuple] = []
-    real_choice = canvas_module.draw_choice_block
-    real_block = canvas_module.draw_block
-
-    def recording_choice(base, draw, box, sections, alpha=1.0):
-        boxes.append(box)
-        captured.append(sections)
-        return real_choice(base, draw, box, sections, alpha)
-
-    def recording_block(base, draw, box, spine_color, lines, alpha=1.0):
-        block_calls.append((box, spine_color, lines))
-        return real_block(base, draw, box, spine_color, lines, alpha)
-
     with (
-        patch.object(canvas_module, "draw_choice_block", side_effect=recording_choice),
-        patch.object(canvas_module, "draw_block", side_effect=recording_block),
+        patch.object(
+            canvas_module, "draw_combined", wraps=canvas_module.draw_combined
+        ) as combined_mock,
+        patch.object(canvas_module, "draw_block") as block_mock,
     ):
         image = render_typical(
             [left, right],
@@ -119,15 +106,15 @@ def test_colliding_clusters_render_as_one_combined_block():
             date_to=date(2026, 10, 30),
             weeks=5,
         )
-    assert block_calls == []
-    assert len(boxes) == 1
-    box = boxes[0]
+    block_mock.assert_not_called()
+    assert combined_mock.call_count == 1
+    box = combined_mock.call_args.args[2]
+    sections = combined_mock.call_args.args[3]
     assert box[0] == col_x(3) + BLOCK_PAD_X
     assert box[2] == col_x(3) + COL_W - BLOCK_PAD_X
     assert box[1] == GRID_TOP + (13 - START_HOUR) * HOUR_H
     assert box[3] == GRID_TOP + (16 - START_HOUR) * HOUR_H
 
-    (sections,) = captured
     assert len(sections) == 2
     assert tuple(sections[0][0]) == tuple(WYK_ORANGE)
     assert tuple(sections[1][0]) == tuple(UNKNOWN_SPINE)
@@ -141,12 +128,12 @@ def test_colliding_clusters_render_as_one_combined_block():
     assert any("×5" in text for text, kind in sections[1][1] if kind == "meta")
 
     x_chip = int(col_x(3) + BLOCK_PAD_X + 4)
-    placed = place_choice_sections([lines for _, lines in sections])
+    placed = place_sections([lines for _, lines in sections])
     for (color, _), placed_lines in zip(sections, placed, strict=True):
         assert placed_lines
         _, first_kind, first_dy = placed_lines[0]
         step = SUBJECT_STEP if first_kind == "subject" else META_STEP
-        chip_y = int(box[1]) + first_dy + (step - CHOICE_CHIP_H) // 2 + 2
+        chip_y = int(box[1]) + first_dy + (step - SECTION_CHIP_H) // 2 + 2
         pixel = image.getpixel((x_chip, chip_y))
         assert _pixel_close(pixel, tuple(color))
 

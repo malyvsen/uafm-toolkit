@@ -11,8 +11,9 @@ from plan_render.fonts import font
 from plan_render.text import (
     BlockLine,
     LineKind,
-    place_choice_sections,
+    line_step,
     place_lines,
+    place_sections,
 )
 
 _INK: dict[LineKind, tuple[int, int, int]] = {
@@ -20,6 +21,7 @@ _INK: dict[LineKind, tuple[int, int, int]] = {
     "meta": style.SOFT_GREY,
     "room": style.ROOM_GREY,
 }
+CombinedSection = tuple[tuple[int, int, int], list[BlockLine]]
 
 
 def span_y(start: time, end: time, grid_top: int) -> tuple[float, float]:
@@ -158,7 +160,7 @@ def draw_block(
     base: Image.Image,
     draw: ImageDraw.ImageDraw,
     box: tuple[float, float, float, float],
-    spine_color: tuple[int, ...],
+    spine_color: tuple[int, int, int],
     lines: list[BlockLine],
     alpha: float = 1.0,
 ) -> None:
@@ -169,35 +171,19 @@ def draw_block(
     stay legible. Room lines render dimmer than time lines, with a gap
     separating the two groups.
     """
-    left, top, right, bottom = (int(v) for v in box)
-    if right - left <= 0 or bottom - top <= 0:
+    boxed = _frosted_box(base, draw, box, alpha)
+    if boxed is None:
         return
-    frost(base, (left, top, right, bottom), alpha)
-    draw.rounded_rectangle(
-        [left, top, right, bottom],
-        radius=style.EVENT_RADIUS,
-        outline=style.EVENT_BORDER,
-        width=1,
-    )
+    left, top, _right, bottom = boxed
     draw.rectangle([left, top, left + style.SPINE_W, bottom], fill=spine_color)
-
-    text_x = left + style.SPINE_W + style.TEXT_GAP
-    subject_font = font("bold", style.SUBJECT_SIZE)
-    meta_font = font("italic", style.META_SIZE)
-    for text, kind, dy in place_lines(lines):
-        draw.text(
-            (text_x, top + dy),
-            text,
-            font=subject_font if kind == "subject" else meta_font,
-            fill=_INK[kind],
-        )
+    _draw_text(draw, left + style.SPINE_W + style.TEXT_GAP, top, place_lines(lines))
 
 
-def draw_choice_block(
+def draw_combined(
     base: Image.Image,
     draw: ImageDraw.ImageDraw,
     box: tuple[float, float, float, float],
-    sections: list[tuple[tuple[int, ...], list[BlockLine]]],
+    sections: list[CombinedSection],
     alpha: float = 1.0,
 ) -> None:
     """Render one combined block for colliding classes, one section per class.
@@ -206,9 +192,48 @@ def draw_choice_block(
     section carries a small opaque chip in its class color, with a dashed
     divider between sections. Text uses the same subject/meta fonts as blocks.
     """
+    boxed = _frosted_box(base, draw, box, alpha)
+    if boxed is None:
+        return
+    left, top, right, _bottom = boxed
+    non_empty = [(color, lines) for color, lines in sections if lines]
+    if not non_empty:
+        return
+    placed = place_sections([lines for _, lines in non_empty])
+
+    text_x = left + style.SPINE_W + style.TEXT_GAP
+    text_right = right - style.TEXT_PAD_RIGHT
+    for index, ((color, _), placed_lines) in enumerate(
+        zip(non_empty, placed, strict=True)
+    ):
+        if not placed_lines:
+            continue
+        if index > 0:
+            _dashed_line(
+                draw,
+                text_x,
+                text_right,
+                top + placed_lines[0][2] - style.SECTION_GAP // 2,
+            )
+        _, first_kind, first_dy = placed_lines[0]
+        chip_y = top + first_dy + (line_step(first_kind) - style.SECTION_CHIP_H) // 2
+        draw.rectangle(
+            [left, chip_y, left + style.SECTION_CHIP_W, chip_y + style.SECTION_CHIP_H],
+            fill=color,
+        )
+        _draw_text(draw, text_x, top, placed_lines)
+
+
+def _frosted_box(
+    base: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    box: tuple[float, float, float, float],
+    alpha: float,
+) -> tuple[int, int, int, int] | None:
+    """Melt frost into `base` and outline the block; None when degenerate."""
     left, top, right, bottom = (int(v) for v in box)
     if right - left <= 0 or bottom - top <= 0:
-        return
+        return None
     frost(base, (left, top, right, bottom), alpha)
     draw.rounded_rectangle(
         [left, top, right, bottom],
@@ -216,54 +241,35 @@ def draw_choice_block(
         outline=style.EVENT_BORDER,
         width=1,
     )
-    non_empty = [(color, lines) for color, lines in sections if lines]
-    if not non_empty:
-        return
-    placed = place_choice_sections([lines for _, lines in non_empty])
+    return left, top, right, bottom
 
-    text_x = left + style.SPINE_W + style.TEXT_GAP
-    text_right = right - style.TEXT_PAD_RIGHT
+
+def _draw_text(
+    draw: ImageDraw.ImageDraw,
+    text_x: int,
+    top: int,
+    placed: list[tuple[str, LineKind, int]],
+) -> None:
     subject_font = font("bold", style.SUBJECT_SIZE)
     meta_font = font("italic", style.META_SIZE)
-    for index, ((color, _), placed_lines) in enumerate(
-        zip(non_empty, placed, strict=True)
-    ):
-        if index > 0:
-            previous = placed[index - 1]
-            gap_top = previous[-1][2] + _choice_step(previous[-1][1])
-            divider_y = top + gap_top + style.SEPARATOR_GAP // 2
-            _dashed_line(draw, text_x, text_right, divider_y)
-        if not placed_lines:
-            continue
-        _, first_kind, first_dy = placed_lines[0]
-        chip_step = style.SUBJECT_STEP if first_kind == "subject" else style.META_STEP
-        chip_y = top + first_dy + (chip_step - style.CHOICE_CHIP_H) // 2
-        draw.rectangle(
-            [left, chip_y, left + style.CHOICE_CHIP_W, chip_y + style.CHOICE_CHIP_H],
-            fill=tuple(color),
+    for text, kind, dy in placed:
+        draw.text(
+            (text_x, top + dy),
+            text,
+            font=subject_font if kind == "subject" else meta_font,
+            fill=_INK[kind],
         )
-        for text, kind, dy in placed_lines:
-            draw.text(
-                (text_x, top + dy),
-                text,
-                font=subject_font if kind == "subject" else meta_font,
-                fill=_INK[kind],
-            )
-
-
-def _choice_step(kind: LineKind) -> int:
-    return style.SUBJECT_STEP if kind == "subject" else style.META_STEP
 
 
 def _dashed_line(draw: ImageDraw.ImageDraw, x0: int, x1: int, y: int) -> None:
     x = x0
     while x < x1:
         draw.line(
-            [(x, y), (min(x + style.SEPARATOR_DASH - 1, x1 - 1), y)],
-            fill=style.SEPARATOR_COLOR,
+            [(x, y), (min(x + style.DIVIDER_DASH - 1, x1 - 1), y)],
+            fill=style.DIVIDER_COLOR,
             width=1,
         )
-        x += style.SEPARATOR_DASH + style.SEPARATOR_DASH_GAP
+        x += style.DIVIDER_DASH + style.DIVIDER_GAP
 
 
 def finish(base: Image.Image, overlay: Image.Image, seed: date) -> Image.Image:

@@ -6,13 +6,13 @@ from plan_render import canvas, style
 from plan_render.style import BLOCK_PAD_Y, HOUR_H, META_STEP, ROOM_GAP, SUBJECT_STEP
 from plan_render.text import (
     BlockLine,
-    ChoiceAlternative,
+    CombinedAlternative,
     LineKind,
     layout_block,
-    layout_choice_block,
     layout_cluster,
-    place_choice_sections,
+    layout_combined,
     place_lines,
+    place_sections,
 )
 
 
@@ -34,12 +34,10 @@ def _cluster_layout(
     return layout_cluster(subject, times, text_w, minutes * HOUR_H / 60, _fake_measure)
 
 
-def _choice_layout(
-    alternatives: list[ChoiceAlternative], text_w: float, minutes: float
+def _combined_layout(
+    alternatives: list[CombinedAlternative], text_w: float, minutes: float
 ) -> list[list[BlockLine]]:
-    return layout_choice_block(
-        alternatives, text_w, minutes * HOUR_H / 60, _fake_measure
-    )
+    return layout_combined(alternatives, text_w, minutes * HOUR_H / 60, _fake_measure)
 
 
 def test_short_subject_uses_separate_meta():
@@ -129,8 +127,8 @@ def test_room_lines_start_after_a_gap():
     assert room_dy == BLOCK_PAD_Y + SUBJECT_STEP + META_STEP + ROOM_GAP
 
 
-def test_choice_fits_all_sections_with_times():
-    sections = _choice_layout(
+def test_combined_fits_all_sections_with_times():
+    sections = _combined_layout(
         [("Wymowa", ["10:00–11:30 ×2"]), ("Interpretacja prozy", ["9:40–12:05 ×8"])],
         200,
         165,
@@ -143,8 +141,8 @@ def test_choice_fits_all_sections_with_times():
     assert sections[1][1][0] == "9:40–12:05 ×8"
 
 
-def test_choice_falls_back_to_subjects_only_when_tight():
-    sections = _choice_layout(
+def test_combined_falls_back_to_subjects_only_when_tight():
+    sections = _combined_layout(
         [("Wymowa", ["10:00–11:30 ×2"]), ("Interpretacja prozy", ["9:40–12:05 ×8"])],
         200,
         70,
@@ -154,12 +152,12 @@ def test_choice_falls_back_to_subjects_only_when_tight():
     assert [kind for _, kind in sections[1]] == ["subject"]
 
 
-def test_choice_tiny_block_yields_no_sections():
-    assert _choice_layout([("Wymowa", ["10:00–10:20 ×1"])], 200, 15) == []
+def test_combined_tiny_block_yields_no_sections():
+    assert _combined_layout([("Wymowa", ["10:00–10:20 ×1"])], 200, 15) == []
 
 
-def test_choice_truncates_overlong_lines():
-    sections = _choice_layout(
+def test_combined_truncates_overlong_lines():
+    sections = _combined_layout(
         [("Elementarne zadania aktorskie w teatrze lalek", ["10:00–11:30 ×2"])],
         50,
         165,
@@ -168,30 +166,18 @@ def test_choice_truncates_overlong_lines():
     assert any(line[0].endswith("…") for line in sections[0])
 
 
-def test_choice_wraps_subjects_like_cluster():
-    clustered = _cluster_layout(
-        "Elementarne zadania aktorskie", ["10:00–12:25 ×1"], 150, 145
-    )
-    (section,) = _choice_layout(
-        [("Elementarne zadania aktorskie", ["10:00–12:25 ×1"])], 150, 145
-    )
-    assert [text for text, kind in section if kind == "subject"] == [
-        text for text, kind in clustered if kind == "subject"
-    ]
-
-
-def test_choice_sections_separated_by_gap():
-    placed = place_choice_sections([[("Wymowa", "subject")], [("Głos", "subject")]])
+def test_combined_sections_separated_by_gap():
+    placed = place_sections([[("Wymowa", "subject")], [("Głos", "subject")]])
     assert placed[0][0][2] == BLOCK_PAD_Y
-    assert placed[1][0][2] == BLOCK_PAD_Y + SUBJECT_STEP + style.SEPARATOR_GAP
+    assert placed[1][0][2] == BLOCK_PAD_Y + SUBJECT_STEP + style.SECTION_GAP
 
 
-def test_choice_chips_use_section_colors():
+def test_combined_chips_use_section_colors():
     base = Image.new("RGB", (300, 300), (20, 25, 30))
     overlay = Image.new("RGBA", (300, 300), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     box = (5, 10, 295, 200)
-    canvas.draw_choice_block(
+    canvas.draw_combined(
         base,
         draw,
         box,
@@ -202,25 +188,28 @@ def test_choice_chips_use_section_colors():
     )
     left = int(box[0])
     first_chip_y = (
-        int(box[1]) + BLOCK_PAD_Y + (SUBJECT_STEP - style.CHOICE_CHIP_H) // 2 + 2
+        int(box[1]) + BLOCK_PAD_Y + (SUBJECT_STEP - style.SECTION_CHIP_H) // 2 + 2
     )
     first_chip = overlay.getpixel((left + 4, first_chip_y))
     assert isinstance(first_chip, tuple) and first_chip[:3] == style.WAR_YELLOW
-    placed = place_choice_sections([[("Wymowa", "subject")], [("Głos", "subject")]])
-    second_dy = placed[1][0][2]
     second_chip_y = (
-        int(box[1]) + second_dy + (SUBJECT_STEP - style.CHOICE_CHIP_H) // 2 + 2
+        int(box[1])
+        + BLOCK_PAD_Y
+        + SUBJECT_STEP
+        + style.SECTION_GAP
+        + (SUBJECT_STEP - style.SECTION_CHIP_H) // 2
+        + 2
     )
     second_chip = overlay.getpixel((left + 4, second_chip_y))
     assert isinstance(second_chip, tuple) and second_chip[:3] == style.UNKNOWN_SPINE
 
 
-def test_choice_divider_is_dashed():
+def test_combined_divider_is_dashed():
     base = Image.new("RGB", (300, 300), (20, 25, 30))
     overlay = Image.new("RGBA", (300, 300), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     box = (5, 10, 295, 200)
-    canvas.draw_choice_block(
+    canvas.draw_combined(
         base,
         draw,
         box,
@@ -229,11 +218,9 @@ def test_choice_divider_is_dashed():
             (style.WYK_ORANGE, [("Głos", "subject")]),
         ],
     )
-    placed = place_choice_sections([[("Wymowa", "subject")], [("Głos", "subject")]])
-    gap_top = placed[0][-1][2] + SUBJECT_STEP
-    divider_y = int(box[1]) + gap_top + style.SEPARATOR_GAP // 2
+    divider_y = int(box[1]) + BLOCK_PAD_Y + SUBJECT_STEP + style.SECTION_GAP // 2
     text_x = int(box[0]) + style.SPINE_W + style.TEXT_GAP
     dash_pixel = overlay.getpixel((text_x + 1, divider_y))
-    gap_pixel = overlay.getpixel((text_x + style.SEPARATOR_DASH + 1, divider_y))
+    gap_pixel = overlay.getpixel((text_x + style.DIVIDER_DASH + 1, divider_y))
     assert isinstance(dash_pixel, tuple) and dash_pixel[3] > 0
     assert isinstance(gap_pixel, tuple) and gap_pixel[3] == 0

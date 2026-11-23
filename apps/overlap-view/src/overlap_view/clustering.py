@@ -99,13 +99,12 @@ def _build(weekday: int, subject: str, form: str, members: list[Event]) -> Clust
 def _components(day_clusters: list[Cluster]) -> list[list[Cluster]]:
     """Split a weekday's start-sorted clusters into transitively overlapping groups."""
     components: list[list[Cluster]] = []
+    span_end = time.min
     for cluster in day_clusters:
-        if components and any(_overlaps(cluster, other) for other in components[-1]):
+        if components and cluster.start < span_end:
             components[-1].append(cluster)
+            span_end = max(span_end, cluster.end)
         else:
             components.append([cluster])
+            span_end = cluster.end
     return components
-
-
-def _overlaps(left: Cluster, right: Cluster) -> bool:
-    return left.start < right.end and right.start < left.end

@@ -48,8 +48,9 @@ GRID_TOP = (
     + GRID_GAP
 )
 
-# Class-block geometry: inset from the column edge, thick spine on the left,
-# then text with a right inset. Text lines use 6pt leading.
+# Class-block geometry: inset from the column edge, then text with a right
+# inset. Single-class blocks carry a thick spine on the left; combined
+# blocks carry one small chip per section instead. Text lines use 6pt leading.
 BLOCK_PAD_X = 5
 SPINE_W = 8
 TEXT_GAP = 12
@@ -61,15 +62,15 @@ META_STEP = 27
 ROOM_GAP = 7
 LINE_SLACK = 8
 
-# Choice-block geometry: one combined block per collision, with a dashed
+# Combined-block geometry: one combined block per collision, with a dashed
 # divider between class sections and a small opaque chip per section
 # (spine color, no full-height spine).
-SEPARATOR_GAP = 16
-CHOICE_CHIP_W = 8
-CHOICE_CHIP_H = 15
-SEPARATOR_DASH = 6
-SEPARATOR_DASH_GAP = 4
-SEPARATOR_COLOR = (255, 255, 255, 64)
+SECTION_GAP = 16
+SECTION_CHIP_W = 8
+SECTION_CHIP_H = 15
+DIVIDER_DASH = 6
+DIVIDER_GAP = 4
+DIVIDER_COLOR = (255, 255, 255, 64)
 
 # Frosted glass for event blocks: blur and white overlay, plus corner radius.
 EVENT_BLUR_RADIUS = 14
@@ -111,7 +112,7 @@ FORM_STYLES = {
 }
 
 
-def spine_for(form: str) -> tuple[int, ...]:
+def spine_for(form: str) -> tuple[int, int, int]:
     """Spine color for a class form, muted for unknown forms."""
     return FORM_STYLES.get(form, ("", UNKNOWN_SPINE))[1]
 
