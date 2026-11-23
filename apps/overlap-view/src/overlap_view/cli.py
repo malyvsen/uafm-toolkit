@@ -1,6 +1,7 @@
 """Command line: generate a typical-week PNG from the study plan."""
 
 import sys
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -9,7 +10,11 @@ import platformdirs
 
 from overlap_view.clustering import cluster_events
 from overlap_view.renderer import render_typical
-from overlap_view.semester import semester_remainder
+from overlap_view.semester import (
+    SemesterIdentity,
+    semester_identity,
+    semester_remainder,
+)
 from plan_downloader import CredentialsError, DownloadError, download_timetable
 from plan_parser import Event, parse_pdf
 
@@ -25,6 +30,22 @@ class OverlapError(Exception):
     """A user-facing failure with a ready-to-print Polish message."""
 
 
+@dataclass(frozen=True)
+class SemesterDefault:
+    """Default run: the remaining teaching period."""
+
+    start: date
+    end: date
+
+
+@dataclass(frozen=True)
+class CustomRange:
+    """Explicit run: user-supplied dates."""
+
+    start: date
+    end: date
+
+
 @app.default
 def main(
     *,
@@ -34,9 +55,9 @@ def main(
 ) -> None:
     """Overlap every week in the range into one typical-week PNG."""
     try:
-        start, end = resolve_date_range(date_from, date_to, today=date.today())
-        data = download_timetable(start, end, on_progress=print)
-        path = render_overlap(parse_pdf(data), output_dir)
+        date_range = resolve_date_range(date_from, date_to, today=date.today())
+        data = download_timetable(date_range.start, date_range.end, on_progress=print)
+        path = render_overlap(parse_pdf(data), output_dir, date_range)
     except (OverlapError, CredentialsError, DownloadError) as exc:
         print(exc, file=sys.stderr)
         raise SystemExit(1) from exc
@@ -45,16 +66,19 @@ def main(
 
 def resolve_date_range(
     date_from: date | None, date_to: date | None, *, today: date
-) -> tuple[date, date]:
+) -> SemesterDefault | CustomRange:
     """Fill missing dates with the remaining teaching period (see semester)."""
     if date_from is None and date_to is None:
-        return semester_remainder(today)
+        start, end = semester_remainder(today)
+        return SemesterDefault(start, end)
     if date_from is None or date_to is None:
         raise OverlapError("Podaj obie daty: --date-from i --date-to.")
-    return date_from, date_to
+    return CustomRange(date_from, date_to)
 
 
-def render_overlap(events: list[Event], output_dir: Path) -> Path:
+def render_overlap(
+    events: list[Event], output_dir: Path, date_range: SemesterDefault | CustomRange
+) -> Path:
     """Render every event as one typical-week PNG and return its path."""
     clusters = cluster_events(events)
     if not clusters:
@@ -65,7 +89,12 @@ def render_overlap(events: list[Event], output_dir: Path) -> Path:
     distinct_weeks = {(day.isocalendar().year, day.isocalendar().week) for day in dates}
     output_dir.mkdir(parents=True, exist_ok=True)
     date_from, date_to = min(dates), max(dates)
-    path = output_dir / output_name(date_from, date_to)
+    match date_range:
+        case SemesterDefault():
+            filename = semester_output_name(semester_identity(date_from))
+        case CustomRange():
+            filename = custom_output_name(date_from, date_to)
+    path = output_dir / filename
     render_typical(
         clusters,
         date_from=date_from,
@@ -75,6 +104,11 @@ def render_overlap(events: list[Event], output_dir: Path) -> Path:
     return path
 
 
-def output_name(date_from: date, date_to: date) -> str:
+def semester_output_name(identity: SemesterIdentity) -> str:
+    """Semester PNG name, e.g. plan-2026-2027-semestr-zimowy.png."""
+    return f"plan-{identity.start_year}-{identity.start_year + 1}-semestr-{identity.kind}.png"
+
+
+def custom_output_name(date_from: date, date_to: date) -> str:
     """Dated PNG name so different ranges never overwrite each other."""
-    return f"plan-overlap-{date_from.isoformat()}-{date_to.isoformat()}.png"
+    return f"plan-{date_from.isoformat()}-{date_to.isoformat()}.png"

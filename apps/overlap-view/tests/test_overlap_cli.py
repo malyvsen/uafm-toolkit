@@ -3,6 +3,7 @@
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -10,13 +11,16 @@ import pytest
 from PIL import Image
 
 from overlap_view.cli import (
+    CustomRange,
     OverlapError,
+    SemesterDefault,
+    custom_output_name,
     main,
-    output_name,
     render_overlap,
     resolve_date_range,
+    semester_output_name,
 )
-from overlap_view.semester import semester_remainder
+from overlap_view.semester import SemesterIdentity, semester_remainder
 from plan_downloader import Credentials
 from plan_parser import Event, parse_pdf
 
@@ -52,56 +56,99 @@ def stub_download(
     return calls
 
 
-def test_overlap_produces_single_png(tmp_path: Path, two_events: list[Event]):
-    expected = tmp_path / "plan-overlap-2026-10-19-2026-10-30.png"
-    assert render_overlap(two_events, tmp_path) == expected
+def test_custom_range_produces_dated_png(tmp_path: Path, two_events: list[Event]):
+    expected = tmp_path / "plan-2026-10-19-2026-10-30.png"
+    date_range = CustomRange(date(2026, 10, 1), date(2026, 10, 31))
+    assert render_overlap(two_events, tmp_path, date_range) == expected
     with Image.open(expected) as image:
         image.load()
         assert image.size == (1744, 1698)
 
 
+def test_default_naming_uses_academic_year_and_kind(
+    tmp_path: Path, two_events: list[Event]
+):
+    expected = tmp_path / "plan-2026-2027-semestr-zimowy.png"
+    date_range = SemesterDefault(date(2026, 10, 21), date(2027, 1, 31))
+    assert render_overlap(two_events, tmp_path, date_range) == expected
+
+
+def test_winter_and_summer_defaults_differ(tmp_path: Path, two_events: list[Event]):
+    winter = render_overlap(
+        two_events,
+        tmp_path,
+        SemesterDefault(date(2026, 10, 21), date(2027, 1, 31)),
+    )
+    summer_event = replace(two_events[0], date=date(2027, 4, 5))
+    summer = render_overlap(
+        [summer_event],
+        tmp_path,
+        SemesterDefault(date(2027, 4, 5), date(2027, 6, 30)),
+    )
+    assert winter.name == "plan-2026-2027-semestr-zimowy.png"
+    assert summer.name == "plan-2026-2027-semestr-letni.png"
+    assert winter != summer
+
+
 def test_rerun_overwrites_silently(tmp_path: Path, two_events: list[Event]):
-    first = render_overlap(two_events, tmp_path)
-    second = render_overlap(two_events, tmp_path)
+    date_range = SemesterDefault(date(2026, 10, 21), date(2027, 1, 31))
+    first = render_overlap(two_events, tmp_path, date_range)
+    second = render_overlap(two_events, tmp_path, date_range)
     assert first == second
     assert first.exists()
 
 
 def test_different_dates_give_different_names(two_events: list[Event]):
-    full = output_name(min(e.date for e in two_events), max(e.date for e in two_events))
+    full = custom_output_name(
+        min(e.date for e in two_events), max(e.date for e in two_events)
+    )
     first_week = [e for e in two_events if e.date < date(2026, 10, 26)]
-    partial = output_name(
+    partial = custom_output_name(
         min(e.date for e in first_week), max(e.date for e in first_week)
     )
-    assert full == "plan-overlap-2026-10-19-2026-10-30.png"
+    assert full == "plan-2026-10-19-2026-10-30.png"
     assert partial != full
-    assert partial.startswith("plan-overlap-2026-10-19-")
+    assert partial.startswith("plan-2026-10-19-")
 
 
-def test_output_name_encodes_range():
-    assert output_name(date(2026, 10, 19), date(2026, 10, 30)) == (
-        "plan-overlap-2026-10-19-2026-10-30.png"
+def test_custom_output_name_encodes_range():
+    assert custom_output_name(date(2026, 10, 19), date(2026, 10, 30)) == (
+        "plan-2026-10-19-2026-10-30.png"
+    )
+
+
+def test_semester_output_name_encodes_year_and_kind():
+    assert (
+        semester_output_name(SemesterIdentity(kind="zimowy", start_year=2026))
+        == "plan-2026-2027-semestr-zimowy.png"
+    )
+    assert (
+        semester_output_name(SemesterIdentity(kind="letni", start_year=2026))
+        == "plan-2026-2027-semestr-letni.png"
     )
 
 
 def test_empty_events_fail(tmp_path: Path):
     with pytest.raises(OverlapError):
-        render_overlap([], tmp_path)
+        render_overlap(
+            [], tmp_path, SemesterDefault(date(2026, 10, 21), date(2027, 1, 31))
+        )
 
 
 def test_default_range_is_the_remaining_semester():
     today = date(2026, 10, 21)
-    assert resolve_date_range(None, None, today=today) == semester_remainder(today)
-    assert resolve_date_range(None, None, today=today) == (
-        date(2026, 10, 21),
-        date(2027, 1, 31),
+    assert resolve_date_range(None, None, today=today) == SemesterDefault(
+        date(2026, 10, 21), date(2027, 1, 31)
+    )
+    assert resolve_date_range(None, None, today=today) == SemesterDefault(
+        *semester_remainder(today)
     )
 
 
 def test_explicit_dates_pass_through():
     assert resolve_date_range(
         date(2026, 10, 1), date(2026, 10, 31), today=date(2026, 10, 21)
-    ) == (date(2026, 10, 1), date(2026, 10, 31))
+    ) == CustomRange(date(2026, 10, 1), date(2026, 10, 31))
 
 
 def test_only_one_date_fails_fast(tmp_path: Path):
@@ -120,7 +167,7 @@ def test_main_downloads_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     )
     assert calls == [(date(2026, 10, 1), date(2026, 10, 31))]
     assert list(tmp_path.glob("*.pdf")) == []
-    assert (tmp_path / "plan-overlap-2026-10-19-2026-10-30.png").exists()
+    assert (tmp_path / "plan-2026-10-19-2026-10-30.png").exists()
 
 
 def test_main_defaults_to_semester_remainder(
@@ -130,7 +177,7 @@ def test_main_defaults_to_semester_remainder(
     main(output_dir=tmp_path)
     today = date.today()
     assert calls == [semester_remainder(today)]
-    assert (tmp_path / "plan-overlap-2026-10-19-2026-10-30.png").exists()
+    assert (tmp_path / "plan-2026-2027-semestr-zimowy.png").exists()
 
 
 def test_console_script_help():
