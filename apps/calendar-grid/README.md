@@ -5,8 +5,8 @@ CLI that renders all weeks of a study-plan PDF as shareable PNG timetables.
 ## Usage
 
 ```sh
-calendar-grid plan.pdf
-calendar-grid --date-from 2026-10-01 --date-to 2026-10-31 plan.pdf
+task run -- plan.pdf
+task run -- --date-from 2026-10-01 --date-to 2026-10-31 plan.pdf
 ```
 
 With `--date-from` and `--date-to`, the PDF is downloaded first using
