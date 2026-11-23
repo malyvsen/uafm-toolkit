@@ -6,7 +6,8 @@ from PIL import Image, ImageDraw
 
 from overlap_view.clustering import Cluster
 from plan_render import canvas, style
-from plan_render.text import block_measure, layout_cluster
+from plan_render.background import background_for_date
+from plan_render.text import BlockMeasure, block_measure, layout_cluster
 
 TITLE = "Typowy tydzień"
 # The palest a once-only cluster gets; every-week clusters stay fully solid.
@@ -23,9 +24,10 @@ def render_typical(
         raise ValueError(f"Cannot render a typical week spanning {weeks} weeks")
 
     width, height = canvas.image_size(5)
-    image = canvas.make_base(date_from, width, height)
-    overlay = canvas.make_overlay(width, height)
+    base = background_for_date(date_from, width, height)
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
+    measure = block_measure(draw)
     canvas.draw_header(
         draw,
         width,
@@ -39,8 +41,8 @@ def render_typical(
     for cluster in sorted(
         clusters, key=lambda c: (c.weekday, c.start, c.end, c.subject)
     ):
-        _draw_cluster(draw, image, overlay, cluster, weeks, style.GRID_TOP)
-    return canvas.finish(image, overlay, date_from)
+        _draw_cluster(draw, base, cluster, weeks, style.GRID_TOP, measure)
+    return canvas.finish(base, overlay, date_from)
 
 
 def alpha_for(total: int, weeks: int) -> float:
@@ -57,21 +59,20 @@ def _weeks_label(weeks: int) -> str:
 
 
 def _hour_segments(clusters: list[Cluster], grid_top: int) -> list[tuple[int, int]]:
-    blocked: dict[int, list[tuple[float, float]]] = {}
-    for cluster in clusters:
-        blocked.setdefault(cluster.weekday, []).append(
-            canvas.span_y(cluster.start, cluster.end, grid_top)
-        )
-    return canvas.hour_segments([canvas.col_x(i) for i in range(5)], blocked, grid_top)
+    spans = [
+        (cluster.weekday, *canvas.span_y(cluster.start, cluster.end, grid_top))
+        for cluster in clusters
+    ]
+    return canvas.hour_segments(spans, 5, grid_top)
 
 
 def _draw_cluster(
     draw: ImageDraw.ImageDraw,
-    image: Image.Image,
-    overlay: Image.Image,
+    base: Image.Image,
     cluster: Cluster,
     weeks: int,
     grid_top: int,
+    measure: BlockMeasure,
 ) -> None:
     top, bottom = canvas.span_y(cluster.start, cluster.end, grid_top)
     lane_w = style.COL_W / cluster.lanes
@@ -89,11 +90,11 @@ def _draw_cluster(
         [f"{variant.room} ×{variant.count}" for variant in cluster.rooms],
         text_w,
         block_h,
-        block_measure(draw),
+        measure,
     )
     canvas.draw_block(
-        image,
-        overlay,
+        base,
+        draw,
         box,
         style.spine_for(cluster.form),
         lines,

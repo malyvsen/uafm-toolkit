@@ -6,23 +6,25 @@ from datetime import date, time
 from PIL import Image, ImageDraw
 
 from plan_render import style
-from plan_render.background import background_for_date
 from plan_render.effects import apply_grain, frost
 from plan_render.fonts import font
-from plan_render.text import BlockLine, place_lines
+from plan_render.text import BlockLine, LineKind, place_lines
 
-
-def offset_minutes(moment: time) -> float:
-    """Minutes from the grid start (8:00) to `moment`, for vertical placement."""
-    return (moment.hour - style.START_HOUR) * 60 + moment.minute
+_INK: dict[LineKind, tuple[int, int, int]] = {
+    "subject": style.OFF_WHITE,
+    "meta": style.SOFT_GREY,
+    "room": style.ROOM_GREY,
+}
 
 
 def span_y(start: time, end: time, grid_top: int) -> tuple[float, float]:
     """Pixel top and bottom of a time span hung below `grid_top`."""
-    return (
-        grid_top + offset_minutes(start) * style.HOUR_H / 60,
-        grid_top + offset_minutes(end) * style.HOUR_H / 60,
-    )
+
+    def y(moment: time) -> float:
+        minutes = (moment.hour - style.START_HOUR) * 60 + moment.minute
+        return grid_top + minutes * style.HOUR_H / 60
+
+    return y(start), y(end)
 
 
 def col_x(index: int) -> int:
@@ -61,16 +63,6 @@ def format_range(start: date, end: date) -> str:
         f"{start.day} {style.MONTHS[start.month - 1]} {start.year} – "
         f"{end.day} {style.MONTHS[end.month - 1]} {end.year}"
     )
-
-
-def make_base(seed: date, width: int, height: int) -> Image.Image:
-    """Build the RGB background canvas, seeded deterministically by `seed`."""
-    return background_for_date(seed, width, height)
-
-
-def make_overlay(width: int, height: int) -> Image.Image:
-    """Build the transparent layer holding lines, borders, and text."""
-    return Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
 
 def draw_header(
@@ -135,30 +127,31 @@ def draw_day_labels(
 
 
 def hour_segments(
-    col_xs: list[int],
-    blocked: dict[int, list[tuple[float, float]]],
-    grid_top: int,
+    spans: Iterable[tuple[int, float, float]], cols: int, grid_top: int
 ) -> list[tuple[int, int]]:
     """Left x and y of each hour-row segment, skipping blocked rows.
 
-    `blocked` maps a column index to the (top, bottom) pixel spans covering it.
+    `spans` holds one (column, top, bottom) pixel span per event block.
     """
+    blocked: dict[int, list[tuple[float, float]]] = {}
+    for col, top, bottom in spans:
+        blocked.setdefault(col, []).append((top, bottom))
     segments: list[tuple[int, int]] = []
     for hour in range(style.START_HOUR, style.END_HOUR + 1):
         y = grid_top + (hour - style.START_HOUR) * style.HOUR_H
-        for i, x in enumerate(col_xs):
+        for i in range(cols):
             covered = any(
                 top - style.HOUR_CLEARANCE <= y <= bottom + style.HOUR_CLEARANCE
                 for top, bottom in blocked.get(i, [])
             )
             if not covered:
-                segments.append((x, y))
+                segments.append((col_x(i), y))
     return segments
 
 
 def draw_block(
     base: Image.Image,
-    overlay: Image.Image,
+    draw: ImageDraw.ImageDraw,
     box: tuple[float, float, float, float],
     spine_color: tuple[int, ...],
     lines: list[BlockLine],
@@ -167,49 +160,38 @@ def draw_block(
     """Render one frosted block, keeping borders, spine, and text opaque.
 
     The frost melts into `base` with strength `alpha`; borders, spine, and
-    text go onto `overlay` fully opaque so rare clusters stay legible. Room
-    lines render dimmer than time lines, with a gap separating the two groups.
+    text go onto the overlay through `draw` fully opaque so rare clusters
+    stay legible. Room lines render dimmer than time lines, with a gap
+    separating the two groups.
     """
     left, top, right, bottom = (int(v) for v in box)
-    width, height = right - left, bottom - top
-    if width <= 0 or height <= 0:
+    if right - left <= 0 or bottom - top <= 0:
         return
     frost(base, (left, top, right, bottom), alpha)
-    region = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(region)
     draw.rounded_rectangle(
-        [0, 0, width, height],
+        [left, top, right, bottom],
         radius=style.EVENT_RADIUS,
         outline=style.EVENT_BORDER,
         width=1,
     )
-    draw.rectangle([0, 0, style.SPINE_W, height], fill=spine_color)
+    draw.rectangle([left, top, left + style.SPINE_W, bottom], fill=spine_color)
 
-    text_left = style.SPINE_W + style.TEXT_GAP
+    text_x = left + style.SPINE_W + style.TEXT_GAP
     subject_font = font("bold", style.SUBJECT_SIZE)
     meta_font = font("italic", style.META_SIZE)
     for text, kind, dy in place_lines(lines):
         draw.text(
-            (text_left, dy),
+            (text_x, top + dy),
             text,
             font=subject_font if kind == "subject" else meta_font,
-            fill=(
-                style.OFF_WHITE
-                if kind == "subject"
-                else style.SOFT_GREY
-                if kind == "meta"
-                else style.ROOM_GREY
-            ),
+            fill=_INK[kind],
         )
-    overlay.paste(region, (left, top), region)
 
 
 def finish(base: Image.Image, overlay: Image.Image, seed: date) -> Image.Image:
-    """Composite the overlay over the background and add deterministic grain."""
-    return apply_grain(
-        Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB"),
-        seed.toordinal(),
-    )
+    """Grain the background, then composite the crisp overlay over it."""
+    grained = apply_grain(base, seed.toordinal())
+    return Image.alpha_composite(grained.convert("RGBA"), overlay).convert("RGB")
 
 
 def _draw_legend(

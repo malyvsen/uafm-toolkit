@@ -6,7 +6,8 @@ from PIL import Image, ImageDraw
 
 from plan_parser import Event
 from plan_render import canvas, style
-from plan_render.text import block_measure, format_room, layout_block
+from plan_render.background import background_for_date
+from plan_render.text import BlockMeasure, block_measure, format_room, layout_block
 
 TITLE = "Plan zajęć"
 
@@ -21,9 +22,10 @@ def render_week(events: list[Event]) -> Image.Image:
     days = [monday + timedelta(days=i) for i in range(7 if weekend else 5)]
 
     width, height = canvas.image_size(len(days))
-    image = canvas.make_base(monday, width, height)
-    overlay = canvas.make_overlay(width, height)
+    base = background_for_date(monday, width, height)
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
+    measure = block_measure(draw)
     canvas.draw_header(
         draw,
         width,
@@ -42,32 +44,30 @@ def render_week(events: list[Event]) -> Image.Image:
         style.GRID_TOP,
     )
     for event in sorted(events, key=lambda e: (e.date, e.start)):
-        _draw_event(image, overlay, event, days, style.GRID_TOP)
-    return canvas.finish(image, overlay, monday)
+        _draw_event(base, draw, event, days, style.GRID_TOP, measure)
+    return canvas.finish(base, overlay, monday)
 
 
 def hour_segments(
     days: list[date], events: list[Event], grid_top: int
 ) -> list[tuple[int, int]]:
     """Left x and y of each hour-row segment, skipping rows covered by events."""
-    blocked: dict[int, list[tuple[float, float]]] = {}
+    spans: list[tuple[int, float, float]] = []
     for event in events:
         col = (event.date - days[0]).days
         if 0 <= col < len(days):
-            blocked.setdefault(col, []).append(
-                canvas.span_y(event.start, event.end, grid_top)
-            )
-    return canvas.hour_segments(
-        [canvas.col_x(i) for i in range(len(days))], blocked, grid_top
-    )
+            top, bottom = canvas.span_y(event.start, event.end, grid_top)
+            spans.append((col, top, bottom))
+    return canvas.hour_segments(spans, len(days), grid_top)
 
 
 def _draw_event(
-    image: Image.Image,
-    overlay: Image.Image,
+    base: Image.Image,
+    draw: ImageDraw.ImageDraw,
     event: Event,
     days: list[date],
     grid_top: int,
+    measure: BlockMeasure,
 ) -> None:
     col = (event.date - days[0]).days
     top, bottom = canvas.span_y(event.start, event.end, grid_top)
@@ -86,6 +86,6 @@ def _draw_event(
         format_room(event.room),
         text_w,
         block_h,
-        block_measure(ImageDraw.Draw(overlay)),
+        measure,
     )
-    canvas.draw_block(image, overlay, box, style.spine_for(event.form), lines)
+    canvas.draw_block(base, draw, box, style.spine_for(event.form), lines)
