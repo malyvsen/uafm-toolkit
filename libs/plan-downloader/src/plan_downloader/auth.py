@@ -20,6 +20,11 @@ class Credentials:
     totp_secret: str
 
 
+def current_code(at: datetime | None = None) -> str:
+    """Read credentials from .env and generate the current login code."""
+    return generate_otp(load_credentials().totp_secret, at)
+
+
 def load_credentials(dotenv_path: Path | str | None = None) -> Credentials:
     """Read UAFM_USERNAME, UAFM_PASSWORD, and UAFM_TOTP_SECRET from .env."""
     if dotenv_path is not None:

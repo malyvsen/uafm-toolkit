@@ -77,7 +77,7 @@ def _type_masked_date(page: Page, field: str, target: date) -> None:
     box.click()
     box.press("ControlOrMeta+A")
     box.press("Delete")
-    box.press_sequentially(_format_date_for_typing(target), delay=30)
+    box.press_sequentially(format_date_for_typing(target), delay=30)
     box.press("Tab")
     if not box.input_value().strip():
         raise DownloadError(f"Nie udało się wpisać daty w pole {field}.")
@@ -96,6 +96,6 @@ def _fetch_timetable_pdf(page: Page) -> bytes:
     return data
 
 
-def _format_date_for_typing(target: date) -> str:
+def format_date_for_typing(target: date) -> str:
     """Format a date as the digit string the masked widget accepts."""
     return f"{target:%d%m%Y}"
