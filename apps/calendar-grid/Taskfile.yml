@@ -5,7 +5,7 @@ includes:
 
 tasks:
   run:
-    desc: Render timetable (args after -- are passed through)
+    desc: Generate PNG timetables from the study plan (args after -- are passed through)
     cmds:
       - uv run --no-sync calendar-grid {{.CLI_ARGS}}
 

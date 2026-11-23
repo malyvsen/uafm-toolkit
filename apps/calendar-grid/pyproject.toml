@@ -1,9 +1,15 @@
 [project]
 name = "calendar-grid"
 version = "0.1.0"
-description = "Render all weeks of classes as shareable PNG timetables."
+description = "Generate PNG timetables from the study plan."
 requires-python = ">=3.15"
-dependencies = ["cyclopts", "pillow", "plan-downloader", "plan-parser"]
+dependencies = [
+    "cyclopts",
+    "pillow",
+    "plan-downloader",
+    "plan-parser",
+    "platformdirs>=4.14.8",
+]
 
 [project.scripts]
 calendar-grid = "calendar_grid.cli:app"

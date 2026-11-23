@@ -1,15 +1,14 @@
-"""CLI tests: rendering weeks, downloading on demand, plus an end-to-end smoke test."""
+"""CLI tests: in-memory download, default date range, plus a console smoke test."""
 
-import shutil
 import subprocess
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
-from calendar_grid.cli import CalendarError, main, render_weeks
+from calendar_grid.cli import CalendarError, main, render_weeks, resolve_date_range
 from plan_downloader import Credentials
 from plan_parser import Event, parse_pdf
 
@@ -30,9 +29,28 @@ def two_events() -> list[Event]:
     return parse_pdf(TWO.read_bytes())
 
 
+def stub_download(
+    monkeypatch: pytest.MonkeyPatch, data: bytes
+) -> list[tuple[date, date]]:
+    """Replace the timetable download with in-memory `data`, recording ranges."""
+    calls: list[tuple[date, date]] = []
+
+    def fake_download(
+        date_from: date,
+        date_to: date,
+        *,
+        credentials: Credentials | None = None,
+    ) -> bytes:
+        calls.append((date_from, date_to))
+        return data
+
+    monkeypatch.setattr("calendar_grid.cli.download_timetable", fake_download)
+    return calls
+
+
 def test_single_week_produces_dated_png(tmp_path: Path, single_events: list[Event]):
-    expected = tmp_path / "plan-single-week-2026-10-19.png"
-    assert render_weeks(single_events, tmp_path / "plan-single-week.pdf") == [expected]
+    expected = tmp_path / "plan-2026-10-19.png"
+    assert render_weeks(single_events, tmp_path) == [expected]
     with Image.open(expected) as image:
         image.load()
         assert image.size == (1744, 1698)
@@ -40,10 +58,10 @@ def test_single_week_produces_dated_png(tmp_path: Path, single_events: list[Even
 
 def test_two_weeks_produce_both_dated_pngs(tmp_path: Path, two_events: list[Event]):
     expected = [
-        tmp_path / "plan-two-weeks-2026-10-19.png",
-        tmp_path / "plan-two-weeks-2026-10-26.png",
+        tmp_path / "plan-2026-10-19.png",
+        tmp_path / "plan-2026-10-26.png",
     ]
-    assert render_weeks(two_events, tmp_path / "plan-two-weeks.pdf") == expected
+    assert render_weeks(two_events, tmp_path) == expected
     for path in expected:
         with Image.open(path) as image:
             image.load()
@@ -51,61 +69,64 @@ def test_two_weeks_produce_both_dated_pngs(tmp_path: Path, two_events: list[Even
 
 
 def test_rerun_overwrites_silently(tmp_path: Path, single_events: list[Event]):
-    pdf = tmp_path / "plan-single-week.pdf"
-    first = render_weeks(single_events, pdf)
-    second = render_weeks(single_events, pdf)
+    first = render_weeks(single_events, tmp_path)
+    second = render_weeks(single_events, tmp_path)
     assert first == second
     assert first[0].exists()
 
 
-def test_missing_pdf_fails(tmp_path: Path):
-    with pytest.raises(SystemExit):
-        main(tmp_path / "nie-ma.pdf")
-
-
 def test_empty_events_fail(tmp_path: Path):
     with pytest.raises(CalendarError):
-        render_weeks([], tmp_path / "plan-empty.pdf")
+        render_weeks([], tmp_path)
 
 
-def test_console_script_end_to_end(tmp_path: Path):
+def test_default_range_is_current_plus_next_week():
+    assert resolve_date_range(None, None, today=date(2026, 10, 21)) == (
+        date(2026, 10, 19),
+        date(2026, 11, 1),
+    )
+
+
+def test_explicit_dates_pass_through():
+    assert resolve_date_range(
+        date(2026, 10, 1), date(2026, 10, 31), today=date(2026, 10, 21)
+    ) == (date(2026, 10, 1), date(2026, 10, 31))
+
+
+def test_only_one_date_fails_fast(tmp_path: Path):
+    with pytest.raises(SystemExit):
+        main(date_from=date(2026, 10, 1), output_dir=tmp_path)
+    with pytest.raises(SystemExit):
+        main(date_to=date(2026, 10, 31), output_dir=tmp_path)
+
+
+def test_main_downloads_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    calls = stub_download(monkeypatch, SINGLE.read_bytes())
+    main(
+        date_from=date(2026, 10, 1),
+        date_to=date(2026, 10, 31),
+        output_dir=tmp_path,
+    )
+    assert calls == [(date(2026, 10, 1), date(2026, 10, 31))]
+    assert list(tmp_path.glob("*.pdf")) == []
+    assert (tmp_path / "plan-2026-10-19.png").exists()
+
+
+def test_main_defaults_to_two_weeks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    calls = stub_download(monkeypatch, SINGLE.read_bytes())
+    main(output_dir=tmp_path)
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    assert calls == [(monday, monday + timedelta(days=13))]
+    assert (tmp_path / "plan-2026-10-19.png").exists()
+
+
+def test_console_script_help():
     script = Path(sys.executable).parent / "calendar-grid"
-    pdf = tmp_path / SINGLE.name
-    shutil.copy(SINGLE, pdf)
     ok = subprocess.run(
-        [str(script), str(pdf)],
+        [str(script), "--help"],
         capture_output=True,
         text=True,
         check=False,
     )
     assert ok.returncode == 0, ok.stderr
-    assert (tmp_path / "plan-single-week-2026-10-19.png").exists()
-
-
-def test_only_one_date_fails_fast(tmp_path: Path):
-    with pytest.raises(SystemExit):
-        main(tmp_path / "plan.pdf", date_from=date(2026, 10, 1))
-
-
-def test_both_dates_download_before_render(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    pdf = tmp_path / "plan.pdf"
-    data = SINGLE.read_bytes()
-    calls: list[tuple[date, date, bool]] = []
-
-    def fake_download(
-        date_from: date,
-        date_to: date,
-        *,
-        headed: bool = False,
-        credentials: Credentials | None = None,
-    ) -> bytes:
-        calls.append((date_from, date_to, headed))
-        return data
-
-    monkeypatch.setattr("calendar_grid.cli.download_timetable", fake_download)
-    main(pdf, date_from=date(2026, 10, 1), date_to=date(2026, 10, 31))
-    assert calls == [(date(2026, 10, 1), date(2026, 10, 31), False)]
-    assert pdf.read_bytes() == data
-    assert (tmp_path / "plan-2026-10-19.png").exists()
