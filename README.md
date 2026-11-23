@@ -13,8 +13,12 @@ task init
 Generate timetables:
 
 ```sh
-task -d apps/calendar-grid run --
+task -d apps/week-view run --
+task -d apps/overlap-view run --
 ```
+
+`week-view` renders one PNG per week (`plan-<MONDAY>.png`); `overlap-view`
+overlaps the whole range into a single typical-week PNG (`plan-overlap.png`).
 
 Check everything:
 

@@ -4,10 +4,12 @@ requires-python = ">=3.15"
 
 [manifest]
 members = [
-    "calendar-grid",
+    "overlap-view",
     "plan-downloader",
     "plan-parser",
+    "plan-render",
     "uafm-toolkit",
+    "week-view",
 ]
 
 [[package]]
@@ -17,27 +19,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz", hash = "sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32", size = 952055, upload-time = "2026-03-19T14:22:25.026Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548, upload-time = "2026-03-19T14:22:23.645Z" },
-]
-
-[[package]]
-name = "calendar-grid"
-version = "0.1.0"
-source = { editable = "apps/calendar-grid" }
-dependencies = [
-    { name = "cyclopts" },
-    { name = "pillow" },
-    { name = "plan-downloader" },
-    { name = "plan-parser" },
-    { name = "platformdirs" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cyclopts" },
-    { name = "pillow" },
-    { name = "plan-downloader", editable = "libs/plan-downloader" },
-    { name = "plan-parser", editable = "libs/plan-parser" },
-    { name = "platformdirs", specifier = ">=4.14.8" },
 ]
 
 [[package]]
@@ -305,6 +286,29 @@ wheels = [
 ]
 
 [[package]]
+name = "overlap-view"
+version = "0.1.0"
+source = { editable = "apps/overlap-view" }
+dependencies = [
+    { name = "cyclopts" },
+    { name = "pillow" },
+    { name = "plan-downloader" },
+    { name = "plan-parser" },
+    { name = "plan-render" },
+    { name = "platformdirs" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cyclopts" },
+    { name = "pillow" },
+    { name = "plan-downloader", editable = "libs/plan-downloader" },
+    { name = "plan-parser", editable = "libs/plan-parser" },
+    { name = "plan-render", editable = "libs/plan-render" },
+    { name = "platformdirs", specifier = ">=4.14.8" },
+]
+
+[[package]]
 name = "packaging"
 version = "26.3"
 source = { registry = "https://pypi.org/simple" }
@@ -396,6 +400,17 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "pdfplumber" }]
+
+[[package]]
+name = "plan-render"
+version = "0.1.0"
+source = { editable = "libs/plan-render" }
+dependencies = [
+    { name = "pillow" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pillow" }]
 
 [[package]]
 name = "platformdirs"
@@ -625,4 +640,27 @@ dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.17.1" },
     { name = "ty", specifier = ">=0.0.89" },
+]
+
+[[package]]
+name = "week-view"
+version = "0.1.0"
+source = { editable = "apps/week-view" }
+dependencies = [
+    { name = "cyclopts" },
+    { name = "pillow" },
+    { name = "plan-downloader" },
+    { name = "plan-parser" },
+    { name = "plan-render" },
+    { name = "platformdirs" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cyclopts" },
+    { name = "pillow" },
+    { name = "plan-downloader", editable = "libs/plan-downloader" },
+    { name = "plan-parser", editable = "libs/plan-parser" },
+    { name = "plan-render", editable = "libs/plan-render" },
+    { name = "platformdirs", specifier = ">=4.14.8" },
 ]

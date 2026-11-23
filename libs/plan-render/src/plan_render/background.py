@@ -16,9 +16,9 @@ SMALL_WIDTH = 384
 BLUR_RADIUS = 25
 
 
-def background_for_week(monday: date, width: int, height: int) -> Image.Image:
-    """Render a deterministic graphite wash seeded by the week-start Monday."""
-    rng = random.Random(monday.toordinal())
+def background_for_date(day: date, width: int, height: int) -> Image.Image:
+    """Render a deterministic graphite wash seeded by `day`."""
+    rng = random.Random(day.toordinal())
     small_height = max(1, round(height * SMALL_WIDTH / width))
     canvas = Image.new("RGB", (SMALL_WIDTH, small_height), BASE)
     draw = ImageDraw.Draw(canvas)

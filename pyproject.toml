@@ -13,10 +13,10 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["libs/plan-downloader", "libs/plan-parser", "apps/calendar-grid"]
+members = ["libs/plan-downloader", "libs/plan-parser", "libs/plan-render", "apps/overlap-view", "apps/week-view"]
 
 [tool.pytest.ini_options]
 testpaths = ["libs", "apps"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["calendar_grid", "plan_downloader", "plan_parser"]
+known-first-party = ["overlap_view", "plan_downloader", "plan_parser", "plan_render", "week_view"]

@@ -1,4 +1,4 @@
-# calendar-grid
+# week-view
 
 CLI that generates PNG timetables from the study plan.
 

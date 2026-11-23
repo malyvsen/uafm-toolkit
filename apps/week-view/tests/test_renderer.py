@@ -5,10 +5,12 @@ from datetime import date, time, timedelta
 from pathlib import Path
 
 import pytest
-from PIL import Image, ImageStat
+from PIL import Image
 
-from calendar_grid.background import background_for_week
-from calendar_grid.renderer import (
+from plan_parser import Event, events_for_week, parse_pdf
+from plan_render.background import background_for_date
+from plan_render.canvas import col_x, legend_forms
+from plan_render.style import (
     BLOCK_PAD_X,
     COL_W,
     GRID_TOP,
@@ -20,17 +22,8 @@ from calendar_grid.renderer import (
     UNKNOWN_SPINE,
     WAR_YELLOW,
     WYK_ORANGE,
-    BlockLine,
-    LineKind,
-    apply_grain,
-    col_x,
-    format_room,
-    hour_segments,
-    layout_block,
-    legend_forms,
-    render_week,
 )
-from plan_parser import Event, events_for_week, parse_pdf
+from week_view.renderer import hour_segments, render_week
 
 FIXTURES = (
     Path(__file__).resolve().parents[3] / "libs" / "plan-parser" / "tests" / "fixtures"
@@ -83,18 +76,6 @@ def test_weekend_columns_appear_only_with_weekend_events(week_19: list[Event]):
     assert with_weekend.size == (plain.width + 2 * (COL_W + GUTTER), plain.height)
 
 
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
-        ("bud.D D 319 - PRACOWNIA AKTORSKA", "sala D 319"),
-        ("bud.B B 020", "sala B 020"),
-        ("bud.D D - 02 - SALA BALETOWA", "sala D -02 · baletowa"),
-    ],
-)
-def test_format_room(raw: str, expected: str):
-    assert format_room(raw) == expected
-
-
 def test_render_rejects_empty_week():
     with pytest.raises(ValueError):
         render_week([])
@@ -117,7 +98,7 @@ def test_block_interiors_are_frosted_not_solid(week_19: list[Event]):
     first = min(week_19, key=lambda e: (e.date, e.start))
     pixel = _interior_pixel(first, monday)
     interior = image.getpixel(pixel)
-    bare = background_for_week(date(2026, 10, 19), *image.size).getpixel(pixel)
+    bare = background_for_date(date(2026, 10, 19), *image.size).getpixel(pixel)
     assert isinstance(interior, tuple) and isinstance(bare, tuple)
     assert interior != WAR_YELLOW
     assert sum(interior) > sum(bare)
@@ -176,31 +157,9 @@ def test_hour_segments_omit_covered_hours():
 
 
 def test_legend_orders_known_forms_then_unknown():
-    monday = date(2026, 10, 19)
-
-    def event(form: str, day: int = 0) -> Event:
-        return Event(
-            date=monday + timedelta(days=day),
-            start=time(10, 0),
-            end=time(11, 0),
-            duration="",
-            subject="",
-            form=form,
-            groups="",
-            room="",
-            lecturer="",
-            credit_form="",
-            tracks="",
-            notes="",
-        )
-
-    assert legend_forms([event("Wyk"), event("War")]) == ["War", "Wyk"]
-    assert legend_forms([event("War"), event("Ćw"), event("Zaj")]) == [
-        "War",
-        "Zaj",
-        "Ćw",
-    ]
-    assert legend_forms([event("")]) == []
+    assert legend_forms(["Wyk", "War"]) == ["War", "Wyk"]
+    assert legend_forms(["War", "Ćw", "Zaj"]) == ["War", "Zaj", "Ćw"]
+    assert legend_forms([""]) == []
 
 
 def test_hour_lines_break_at_gutters_and_blocks(week_19: list[Event]):
@@ -242,7 +201,7 @@ def test_legend_is_bare_not_frosted(week_19: list[Event]):
         range(bar_left + LEGEND_SPINE_W + 2, bar_left + LEGEND_SPINE_W + 10, 2)
     )
     rendered = _avg_pixel_sum(image, gap_xs, y)
-    bare = background_for_week(date(2026, 10, 19), *image.size)
+    bare = background_for_date(date(2026, 10, 19), *image.size)
     expected = _avg_pixel_sum(bare, gap_xs, y)
     assert abs(rendered - expected) < 15
 
@@ -266,82 +225,6 @@ def test_legend_unknown_form_fallback(week_19: list[Event]):
     image = render_week([event])
     left, right, _, _ = _legend_bar_bounds(image, UNKNOWN_SPINE, GRID_TOP)
     assert right - left == LEGEND_SPINE_W
-
-
-def test_grain_is_deterministic():
-    bare = background_for_week(date(2026, 10, 19), 800, 600)
-    seed = date(2026, 10, 19).toordinal()
-    assert apply_grain(bare, seed).tobytes() == apply_grain(bare, seed).tobytes()
-
-
-def test_grain_raises_variance_on_background_patch():
-    bare = background_for_week(date(2026, 10, 19), 800, 600)
-    grained = apply_grain(bare, date(2026, 10, 19).toordinal())
-    patch = (8, 8, 40, 40)
-    grained_std = sum(ImageStat.Stat(grained.crop(patch)).stddev)
-    bare_std = sum(ImageStat.Stat(bare.crop(patch)).stddev)
-    assert grained_std > bare_std
-
-
-def _fake_measure(text: str, kind: LineKind) -> float:
-    return float(len(text) * (10 if kind == "subject" else 8))
-
-
-def _layout(
-    subject: str, time_range: str, room: str, text_w: float, minutes: float
-) -> list[BlockLine]:
-    return layout_block(
-        subject, time_range, room, text_w, minutes * HOUR_H / 60, _fake_measure
-    )
-
-
-def test_short_subject_uses_separate_meta():
-    lines = _layout("Wymowa", "10:00–11:30", "sala D 319", 200, 145)
-    assert [kind for _, kind in lines] == ["subject", "meta", "meta"]
-    assert lines[0][0] == "Wymowa"
-    assert lines[1][0] == "10:00–11:30"
-    assert lines[2][0] == "sala D 319"
-
-
-def test_long_subject_wraps_to_two_lines_with_separate_meta():
-    lines = _layout(
-        "Elementarne zadania aktorskie", "10:00–12:25", "sala D 319", 150, 145
-    )
-    kinds = [kind for _, kind in lines]
-    assert kinds == ["subject", "subject", "meta", "meta"]
-    assert lines[0][0] == "Elementarne"
-    assert lines[2][0] == "10:00–12:25"
-    assert lines[3][0] == "sala D 319"
-
-
-def test_medium_block_keeps_separate_meta():
-    # Fitting is purely visual: a 95-minute block still separates time and
-    # room when the lines fit.
-    lines = _layout("Wymowa", "10:00–11:35", "sala D 319", 200, 95)
-    assert [kind for _, kind in lines] == ["subject", "meta", "meta"]
-
-
-def test_tight_block_falls_back_to_combined_meta():
-    lines = _layout(
-        "Elementarne zadania aktorskie", "10:00–10:45", "sala D 319", 150, 45
-    )
-    assert [kind for _, kind in lines] == ["subject", "meta"]
-    assert "·" in lines[1][0]
-
-
-def test_tiny_block_yields_no_lines():
-    assert _layout("Wymowa", "10:00–10:20", "sala D 319", 200, 20) == []
-
-
-def test_subject_only_when_meta_does_not_fit():
-    lines = _layout("Wymowa", "10:00–10:30", "sala D 319", 200, 30)
-    assert [kind for _, kind in lines] == ["subject"]
-
-
-def test_empty_room_renders_time_only():
-    lines = _layout("Wymowa", "10:00–11:30", "", 200, 145)
-    assert [kind for _, kind in lines] == ["subject", "meta"]
-    assert lines[1][0] == "10:00–11:30"
 
 
 def _block_top_bottom(event: Event) -> tuple[float, float]:

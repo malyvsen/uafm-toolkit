@@ -1,28 +1,28 @@
-"""CLI tests: in-memory download, default date range, plus a console smoke test."""
+"""CLI tests: in-memory download plus the semester-based default range."""
 
 import subprocess
 import sys
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
-from calendar_grid.cli import CalendarError, main, render_weeks, resolve_date_range
+from overlap_view.cli import (
+    OverlapError,
+    main,
+    render_overlap,
+    resolve_date_range,
+)
+from overlap_view.semester import semester_remainder
 from plan_downloader import Credentials
 from plan_parser import Event, parse_pdf
 
 FIXTURES = (
     Path(__file__).resolve().parents[3] / "libs" / "plan-parser" / "tests" / "fixtures"
 )
-SINGLE = FIXTURES / "plan-single-week.pdf"
 TWO = FIXTURES / "plan-two-weeks.pdf"
-
-
-@pytest.fixture(scope="module")
-def single_events() -> list[Event]:
-    return parse_pdf(SINGLE.read_bytes())
 
 
 @pytest.fixture(scope="module")
@@ -47,46 +47,36 @@ def stub_download(
         on_progress("Pobieranie planu…")
         return data
 
-    monkeypatch.setattr("calendar_grid.cli.download_timetable", fake_download)
+    monkeypatch.setattr("overlap_view.cli.download_timetable", fake_download)
     return calls
 
 
-def test_single_week_produces_dated_png(tmp_path: Path, single_events: list[Event]):
-    expected = tmp_path / "plan-2026-10-19.png"
-    assert render_weeks(single_events, tmp_path) == [expected]
+def test_overlap_produces_single_png(tmp_path: Path, two_events: list[Event]):
+    expected = tmp_path / "plan-overlap.png"
+    assert render_overlap(two_events, tmp_path) == expected
     with Image.open(expected) as image:
         image.load()
         assert image.size == (1744, 1698)
 
 
-def test_two_weeks_produce_both_dated_pngs(tmp_path: Path, two_events: list[Event]):
-    expected = [
-        tmp_path / "plan-2026-10-19.png",
-        tmp_path / "plan-2026-10-26.png",
-    ]
-    assert render_weeks(two_events, tmp_path) == expected
-    for path in expected:
-        with Image.open(path) as image:
-            image.load()
-            assert image.mode == "RGB"
-
-
-def test_rerun_overwrites_silently(tmp_path: Path, single_events: list[Event]):
-    first = render_weeks(single_events, tmp_path)
-    second = render_weeks(single_events, tmp_path)
+def test_rerun_overwrites_silently(tmp_path: Path, two_events: list[Event]):
+    first = render_overlap(two_events, tmp_path)
+    second = render_overlap(two_events, tmp_path)
     assert first == second
-    assert first[0].exists()
+    assert first.exists()
 
 
 def test_empty_events_fail(tmp_path: Path):
-    with pytest.raises(CalendarError):
-        render_weeks([], tmp_path)
+    with pytest.raises(OverlapError):
+        render_overlap([], tmp_path)
 
 
-def test_default_range_is_current_plus_next_week():
-    assert resolve_date_range(None, None, today=date(2026, 10, 21)) == (
-        date(2026, 10, 19),
-        date(2026, 11, 1),
+def test_default_range_is_the_remaining_semester():
+    today = date(2026, 10, 21)
+    assert resolve_date_range(None, None, today=today) == semester_remainder(today)
+    assert resolve_date_range(None, None, today=today) == (
+        date(2026, 10, 21),
+        date(2027, 1, 31),
     )
 
 
@@ -104,7 +94,7 @@ def test_only_one_date_fails_fast(tmp_path: Path):
 
 
 def test_main_downloads_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    calls = stub_download(monkeypatch, SINGLE.read_bytes())
+    calls = stub_download(monkeypatch, TWO.read_bytes())
     main(
         date_from=date(2026, 10, 1),
         date_to=date(2026, 10, 31),
@@ -112,20 +102,21 @@ def test_main_downloads_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     )
     assert calls == [(date(2026, 10, 1), date(2026, 10, 31))]
     assert list(tmp_path.glob("*.pdf")) == []
-    assert (tmp_path / "plan-2026-10-19.png").exists()
+    assert (tmp_path / "plan-overlap.png").exists()
 
 
-def test_main_defaults_to_two_weeks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    calls = stub_download(monkeypatch, SINGLE.read_bytes())
+def test_main_defaults_to_semester_remainder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    calls = stub_download(monkeypatch, TWO.read_bytes())
     main(output_dir=tmp_path)
     today = date.today()
-    monday = today - timedelta(days=today.weekday())
-    assert calls == [(monday, monday + timedelta(days=13))]
-    assert (tmp_path / "plan-2026-10-19.png").exists()
+    assert calls == [semester_remainder(today)]
+    assert (tmp_path / "plan-overlap.png").exists()
 
 
 def test_console_script_help():
-    script = Path(sys.executable).parent / "calendar-grid"
+    script = Path(sys.executable).parent / "overlap-view"
     ok = subprocess.run(
         [str(script), "--help"],
         capture_output=True,
