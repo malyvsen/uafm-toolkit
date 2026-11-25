@@ -13,11 +13,6 @@ tasks:
     cmds:
       - uv run --no-sync playwright install firefox
 
-  otp:
-    desc: Print the current login code
-    cmds:
-      - uv run --no-sync python -m plan_downloader.otp
-
   record:
     desc: Open Firefox with the action recorder (pass start URL after --)
     cmds:

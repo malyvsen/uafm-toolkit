@@ -9,7 +9,7 @@ missing. Fill in `UAFM_USERNAME`, `UAFM_PASSWORD`, and `UAFM_TOTP_SECRET` (the a
 Verify the authenticator wiring with:
 
 ```sh
-task otp
+task -d apps/otp generate
 ```
 
 ## Usage
