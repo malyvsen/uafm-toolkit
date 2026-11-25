@@ -45,19 +45,17 @@ def main(
 def resolve_date_range(
     date_from: date | None, date_to: date | None, *, today: date
 ) -> tuple[date, date]:
-    """Expand explicit dates to full Monday–Sunday weeks they touch."""
-    if date_from is None:
-        if date_to is None:
-            monday = today - timedelta(days=today.weekday())
-            return monday, monday + timedelta(days=13)
-        date_from = date_to
-    if date_to is None:
-        date_to = date_from
-    if date_from > date_to:
+    """Full Monday–Sunday weeks covering the dates, defaulting to this week plus the next."""
+    start = date_from if date_from is not None else date_to
+    end = date_to if date_to is not None else date_from
+    if start is None or end is None:
+        monday = today - timedelta(days=today.weekday())
+        return monday, monday + timedelta(days=13)
+    if start > end:
         raise WeekError("--date-from nie może być późniejsze niż --date-to.")
-    return date_from - timedelta(days=date_from.weekday()), date_to + timedelta(
-        days=6 - date_to.weekday()
-    )
+    monday = start - timedelta(days=start.weekday())
+    sunday = end + timedelta(days=6 - end.weekday())
+    return monday, sunday
 
 
 def render_weeks(events: list[Event], output_dir: Path) -> list[Path]:

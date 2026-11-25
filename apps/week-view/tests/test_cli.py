@@ -99,9 +99,7 @@ def test_explicit_dates_snap_to_full_weeks():
     ) == (date(2026, 9, 28), date(2026, 11, 1))
 
 
-def test_single_date_gives_containing_week(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_single_date_snaps_to_containing_week():
     assert resolve_date_range(date(2026, 10, 1), None, today=date(2026, 10, 21)) == (
         date(2026, 9, 28),
         date(2026, 10, 4),
@@ -111,25 +109,11 @@ def test_single_date_gives_containing_week(
         date(2026, 11, 1),
     )
 
-    calls = stub_download(monkeypatch, SINGLE.read_bytes())
-    main(date_from=date(2026, 10, 1), output_dir=tmp_path)
-    assert calls == [(date(2026, 9, 28), date(2026, 10, 4))]
 
-    calls = stub_download(monkeypatch, SINGLE.read_bytes())
-    main(date_to=date(2026, 10, 31), output_dir=tmp_path)
-    assert calls == [(date(2026, 10, 26), date(2026, 11, 1))]
-
-
-def test_reversed_range_fails_fast(tmp_path: Path):
+def test_reversed_range_fails():
     with pytest.raises(WeekError):
         resolve_date_range(
             date(2026, 10, 31), date(2026, 10, 1), today=date(2026, 10, 21)
-        )
-    with pytest.raises(SystemExit):
-        main(
-            date_from=date(2026, 10, 31),
-            date_to=date(2026, 10, 1),
-            output_dir=tmp_path,
         )
 
 
@@ -145,6 +129,33 @@ def test_main_downloads_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert (tmp_path / "plan-2026-10-19.png").exists()
 
 
+@pytest.mark.parametrize(
+    ("date_from", "date_to", "expected"),
+    [
+        (
+            date(2026, 10, 1),
+            None,
+            (date(2026, 9, 28), date(2026, 10, 4)),
+        ),
+        (
+            None,
+            date(2026, 10, 31),
+            (date(2026, 10, 26), date(2026, 11, 1)),
+        ),
+    ],
+)
+def test_main_single_date_downloads_containing_week(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    date_from: date | None,
+    date_to: date | None,
+    expected: tuple[date, date],
+):
+    calls = stub_download(monkeypatch, SINGLE.read_bytes())
+    main(date_from=date_from, date_to=date_to, output_dir=tmp_path)
+    assert calls == [expected]
+
+
 def test_main_defaults_to_two_weeks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     calls = stub_download(monkeypatch, SINGLE.read_bytes())
     main(output_dir=tmp_path)
@@ -152,6 +163,15 @@ def test_main_defaults_to_two_weeks(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monday = today - timedelta(days=today.weekday())
     assert calls == [(monday, monday + timedelta(days=13))]
     assert (tmp_path / "plan-2026-10-19.png").exists()
+
+
+def test_main_reversed_range_exits(tmp_path: Path):
+    with pytest.raises(SystemExit):
+        main(
+            date_from=date(2026, 10, 31),
+            date_to=date(2026, 10, 1),
+            output_dir=tmp_path,
+        )
 
 
 def test_console_script_help():
