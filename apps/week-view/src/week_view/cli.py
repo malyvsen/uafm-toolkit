@@ -7,7 +7,8 @@ from pathlib import Path
 import cyclopts
 import platformdirs
 
-from plan_downloader import CredentialsError, DownloadError, download_timetable
+from auth import CredentialsError
+from plan_downloader import DownloadError, download_timetable
 from plan_parser import Event, available_weeks, events_for_week, parse_pdf
 from week_view.renderer import render_week
 

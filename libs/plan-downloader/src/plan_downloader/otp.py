@@ -2,7 +2,7 @@
 
 import sys
 
-from plan_downloader.auth import CredentialsError, current_code
+from auth import CredentialsError, current_code
 
 
 def main() -> None:

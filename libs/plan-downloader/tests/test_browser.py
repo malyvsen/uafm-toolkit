@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from plan_downloader import Credentials
+from auth import Credentials
 from plan_downloader import browser as browser_module
 from plan_downloader.browser import download_timetable, format_date_for_typing
 

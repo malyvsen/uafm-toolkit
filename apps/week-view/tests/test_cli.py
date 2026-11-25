@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from plan_downloader import Credentials
+from auth import Credentials
 from plan_parser import Event, parse_pdf
 from week_view.cli import WeekError, main, render_weeks, resolve_date_range
 

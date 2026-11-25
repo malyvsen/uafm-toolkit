@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Locator, Page, TimeoutError, sync_playwright
 
-from plan_downloader.auth import Credentials, generate_otp, load_credentials
+from auth import Credentials, generate_otp, load_credentials
 
 
 class DownloadError(Exception):

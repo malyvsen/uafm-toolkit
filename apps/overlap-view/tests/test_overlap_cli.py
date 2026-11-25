@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from auth import Credentials
 from overlap_view.cli import (
     CustomRange,
     DefaultRange,
@@ -21,7 +22,6 @@ from overlap_view.cli import (
     resolve_date_range,
 )
 from overlap_view.semester import SemesterIdentity, semester_remainder
-from plan_downloader import Credentials
 from plan_parser import Event, parse_pdf
 
 FIXTURES = (

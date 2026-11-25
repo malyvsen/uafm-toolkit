@@ -8,6 +8,7 @@ from pathlib import Path
 import cyclopts
 import platformdirs
 
+from auth import CredentialsError
 from overlap_view.clustering import cluster_events
 from overlap_view.renderer import render_typical
 from overlap_view.semester import (
@@ -15,7 +16,7 @@ from overlap_view.semester import (
     semester_identity,
     semester_remainder,
 )
-from plan_downloader import CredentialsError, DownloadError, download_timetable
+from plan_downloader import DownloadError, download_timetable
 from plan_parser import Event, parse_pdf
 
 app = cyclopts.App(

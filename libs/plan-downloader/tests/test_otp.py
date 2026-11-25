@@ -2,7 +2,7 @@
 
 import pytest
 
-from plan_downloader.auth import CredentialsError
+from auth import CredentialsError
 from plan_downloader.otp import main
 
 

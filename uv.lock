@@ -306,6 +306,7 @@ name = "overlap-view"
 version = "0.1.0"
 source = { editable = "apps/overlap-view" }
 dependencies = [
+    { name = "auth" },
     { name = "cyclopts" },
     { name = "pillow" },
     { name = "plan-downloader" },
@@ -316,6 +317,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "auth", editable = "libs/auth" },
     { name = "cyclopts" },
     { name = "pillow" },
     { name = "plan-downloader", editable = "libs/plan-downloader" },
@@ -394,16 +396,14 @@ name = "plan-downloader"
 version = "0.1.0"
 source = { editable = "libs/plan-downloader" }
 dependencies = [
+    { name = "auth" },
     { name = "playwright" },
-    { name = "pyotp" },
-    { name = "python-dotenv" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "auth", editable = "libs/auth" },
     { name = "playwright" },
-    { name = "pyotp" },
-    { name = "python-dotenv" },
 ]
 
 [[package]]
@@ -663,6 +663,7 @@ name = "week-view"
 version = "0.1.0"
 source = { editable = "apps/week-view" }
 dependencies = [
+    { name = "auth" },
     { name = "cyclopts" },
     { name = "pillow" },
     { name = "plan-downloader" },
@@ -673,6 +674,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "auth", editable = "libs/auth" },
     { name = "cyclopts" },
     { name = "pillow" },
     { name = "plan-downloader", editable = "libs/plan-downloader" },
