@@ -1,4 +1,4 @@
-"""Credentials and one-time codes for the dziekanat login."""
+"""Load UAFM credentials from .env."""
 
 import os
 from dataclasses import dataclass

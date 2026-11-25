@@ -1,4 +1,4 @@
-"""One-time codes for the dziekanat login."""
+"""Generate TOTP login codes for the dziekanat login."""
 
 from datetime import datetime
 
