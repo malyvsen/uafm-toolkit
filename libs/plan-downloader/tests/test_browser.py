@@ -1,13 +1,19 @@
 """Browser-driven timetable download."""
 
 from datetime import date
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from auth import Credentials
 from plan_downloader import browser as browser_module
-from plan_downloader.browser import download_timetable, format_date_for_typing
+from plan_downloader.browser import (
+    DownloadError,
+    _set_date_range,
+    download_timetable,
+    format_date_for_typing,
+)
 
 
 def test_reports_progress_in_order(monkeypatch: pytest.MonkeyPatch):
@@ -34,6 +40,49 @@ def test_november_date_matches_manual_typing():
 
 def test_single_digit_day_and_month_are_zero_padded():
     assert format_date_for_typing(date(2026, 1, 5)) == "05012026"
+
+
+def test_types_data_do_before_data_od(monkeypatch: pytest.MonkeyPatch):
+    order: list[str] = []
+    monkeypatch.setattr(
+        browser_module,
+        "_type_masked_date",
+        lambda _page, field, _target: order.append(field),
+    )
+    monkeypatch.setattr(browser_module, "_verify_date_range", lambda *_args: None)
+    monkeypatch.setattr(browser_module, "_wait_for_results", lambda _page: None)
+    page: Any = MagicMock()
+    _set_date_range(page, date(2027, 12, 8), date(2027, 12, 29))
+    assert order == ["DataDo", "DataOd"]
+
+
+def test_rejects_clamped_date_range():
+    page: Any = MagicMock()
+    boxes = {
+        'input[name="DataOd"]': _date_box("25.11.2026"),
+        'input[name="DataDo"]': _date_box("29.12.2027"),
+    }
+    page.locator.side_effect = lambda selector: boxes[selector]
+    with pytest.raises(DownloadError, match="DataOd"):
+        _set_date_range(page, date(2027, 12, 8), date(2027, 12, 29))
+
+
+def test_waits_for_results_before_export():
+    page: Any = MagicMock()
+    page.locator.side_effect = lambda selector: _date_box(
+        "08.12.2027" if "DataOd" in selector else "29.12.2027"
+    )
+    _set_date_range(page, date(2027, 12, 8), date(2027, 12, 29))
+    texts = [call.args[0] for call in page.get_by_text.call_args_list]
+    assert "Data Zajęć:" in texts
+    assert "Brak danych" in texts
+    page.get_by_text.return_value.or_.return_value.wait_for.assert_called_once()
+
+
+def _date_box(value: str) -> MagicMock:
+    box = MagicMock()
+    box.input_value.return_value = value
+    return box
 
 
 def stub_browser(monkeypatch: pytest.MonkeyPatch) -> None:
