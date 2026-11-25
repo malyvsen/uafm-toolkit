@@ -5,7 +5,7 @@ from pathlib import Path
 import pdfplumber
 import pytest
 
-from plan_parser import Event, available_weeks, parse_pdf
+from plan_parser import Event, available_weeks, parse_pdf, parse_tables
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SINGLE = FIXTURES / "plan-single-week.pdf"
@@ -99,3 +99,41 @@ def test_no_real_lecturer_surname_survives(fixture: Path):
         text = " ".join((page.extract_text() or "") for page in pdf.pages)
     for surname in REAL_SURNAMES:
         assert surname not in text
+
+
+HEADER_12_COL: list[str | None] = [
+    "Czas\nod",
+    None,
+    "Czas\ndo",
+    "Liczba godzin",
+    "Zajęcia",
+    "Forma zaj.",
+    "Grupy",
+    "Sala",
+    "Prowadzący",
+    "Forma\nzaliczenia",
+    "Toki nauki",
+    "Uwagi",
+]
+
+HEADER_11_COL: list[str | None] = [
+    "Czas\nod",
+    "Czas\ndo",
+    "Liczba godzin",
+    "Zajęcia",
+    "Forma zaj.",
+    "Grupy",
+    "Sala",
+    "Prowadzący",
+    "Forma\nzaliczenia",
+    "Toki nauki",
+    "Uwagi",
+]
+
+
+def test_header_only_12_col_parses_to_no_events():
+    assert parse_tables([[HEADER_12_COL]]) == []
+
+
+def test_header_only_11_col_parses_to_no_events():
+    assert parse_tables([[HEADER_11_COL]]) == []

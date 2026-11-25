@@ -9,7 +9,6 @@ import pdfplumber
 from plan_parser.events import Event
 
 _DATE_PREFIX = "Data Zajęć:"
-_SUBJECT_COLUMN = 4
 _DATE_RE = re.compile(r"^Data Zajęć:\s*(\d{4})\.(\d{2})\.(\d{2})")
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 _HYPHEN_BREAK_RE = re.compile(r"(?<=\S)-\n\s*")
@@ -18,33 +17,36 @@ _COLUMN_COUNT = 12
 
 def parse_pdf(data: bytes) -> list[Event]:
     """Parse every class row in the PDF bytes into events, in file order."""
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        tables = [table for page in pdf.pages for table in page.extract_tables()]
+    return parse_tables(tables)
+
+
+def parse_tables(tables: list[list[list[str | None]]]) -> list[Event]:
+    """Parse already-extracted tables into events, in table order."""
     events: list[Event] = []
     current: date | None = None
-    with pdfplumber.open(io.BytesIO(data)) as pdf:
-        for page in pdf.pages:
-            for table in page.extract_tables():
-                for row in table:
-                    if _is_header(row):
-                        continue
-                    if _is_date_row(row):
-                        current = _parse_date_row(row)
-                    elif _is_class_row(row):
-                        if current is None:
-                            raise ValueError(
-                                "Class row found before any Data Zajęć row"
-                            )
-                        events.append(_parse_event(row, current))
-                    else:
-                        raise ValueError(f"Unrecognized table row: {row!r}")
+    for table in tables:
+        for row in table:
+            if _is_header(row):
+                continue
+            if _is_date_row(row):
+                current = _parse_date_row(row)
+            elif _is_class_row(row):
+                if current is None:
+                    raise ValueError("Class row found before any Data Zajęć row")
+                events.append(_parse_event(row, current))
+            else:
+                raise ValueError(f"Unrecognized table row: {row!r}")
     return events
 
 
 def _is_header(row: list[str | None]) -> bool:
-    return len(row) > _SUBJECT_COLUMN and "Zajęcia" in (row[_SUBJECT_COLUMN] or "")
+    return any("Zajęcia" in (cell or "") for cell in row)
 
 
 def _is_date_row(row: list[str | None]) -> bool:
-    return (row[0] or "").startswith(_DATE_PREFIX)
+    return bool(row) and (row[0] or "").startswith(_DATE_PREFIX)
 
 
 def _parse_date_row(row: list[str | None]) -> date:
