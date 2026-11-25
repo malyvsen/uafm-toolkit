@@ -1,0 +1,9 @@
+version: "3"
+
+includes:
+  python: ../../taskfiles/python.yml
+
+tasks:
+  check:
+    desc: Run all checks
+    deps: [python:check]
