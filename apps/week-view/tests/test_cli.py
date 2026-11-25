@@ -175,7 +175,9 @@ def test_main_reversed_range_exits(tmp_path: Path):
 
 
 def test_main_malformed_plan_exits_polishly(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ):
     stub_download(monkeypatch, b"%PDF-malformed")
 
@@ -190,6 +192,7 @@ def test_main_malformed_plan_exits_polishly(
             output_dir=tmp_path,
         )
     assert exc.value.code == 1
+    assert "nieoczekiwany format" in capsys.readouterr().err
 
 
 def test_console_script_help():

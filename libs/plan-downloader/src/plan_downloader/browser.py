@@ -107,8 +107,10 @@ def _open_plans(page: Page) -> None:
 
 
 def _set_date_range(page: Page, date_from: date, date_to: date) -> None:
-    """Enter both dates keystroke by keystroke, then run the search."""
+    """Type both dates, confirm the widget kept them, and run the search."""
     page.keyboard.press("Escape")
+    # DataDo first: typing DataOd first lets the widget clamp it back to today
+    # when it still lies past the old DataDo.
     _type_masked_date(page, "DataDo", date_to)
     _type_masked_date(page, "DataOd", date_from)
     _verify_date_range(page, date_from, date_to)
@@ -132,18 +134,21 @@ def _verify_date_range(page: Page, date_from: date, date_to: date) -> None:
     """Confirm the masked widget kept both dates instead of clamping them."""
     for field, target in (("DataOd", date_from), ("DataDo", date_to)):
         actual = page.locator(f'input[name="{field}"]').input_value()
-        if "".join(char for char in actual if char.isdigit()) != format_date_for_typing(
-            target
-        ):
+        if _digits(actual) != format_date_for_typing(target):
             raise DownloadError(f"Nie udało się ustawić daty w polu {field}.")
+
+
+def _digits(text: str) -> str:
+    """Strip everything but digits so "08.12.2027" matches "08122027"."""
+    return "".join(char for char in text if char.isdigit())
 
 
 def _wait_for_results(page: Page) -> None:
     """Wait until the search shows classes or an explicit empty state."""
+    classes = page.get_by_text("Data Zajęć:")
+    empty = page.get_by_text("Brak danych")
     try:
-        page.get_by_text("Data Zajęć:").or_(page.get_by_text("Brak danych")).wait_for(
-            timeout=30000
-        )
+        classes.or_(empty).wait_for(timeout=30000)
     except TimeoutError:
         raise DownloadError(
             "Nie znaleziono wyników wyszukiwania. Spróbuj ponownie."

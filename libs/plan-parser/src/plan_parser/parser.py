@@ -14,15 +14,20 @@ _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 _HYPHEN_BREAK_RE = re.compile(r"(?<=\S)-\n\s*")
 _COLUMN_COUNT = 12
 
+Row = list[str | None]
+Table = list[Row]
+
 
 def parse_pdf(data: bytes) -> list[Event]:
     """Parse every class row in the PDF bytes into events, in file order."""
     with pdfplumber.open(io.BytesIO(data)) as pdf:
-        tables = [table for page in pdf.pages for table in page.extract_tables()]
+        tables: list[Table] = [
+            table for page in pdf.pages for table in page.extract_tables()
+        ]
     return parse_tables(tables)
 
 
-def parse_tables(tables: list[list[list[str | None]]]) -> list[Event]:
+def parse_tables(tables: list[Table]) -> list[Event]:
     """Parse already-extracted tables into events, in table order."""
     events: list[Event] = []
     current: date | None = None
@@ -41,15 +46,17 @@ def parse_tables(tables: list[list[list[str | None]]]) -> list[Event]:
     return events
 
 
-def _is_header(row: list[str | None]) -> bool:
+def _is_header(row: Row) -> bool:
+    # The header carries a None spacer in 12-column tables but not in the
+    # 11-column header-only shape, so match any cell instead of one column.
     return any("Zajęcia" in (cell or "") for cell in row)
 
 
-def _is_date_row(row: list[str | None]) -> bool:
-    return bool(row) and (row[0] or "").startswith(_DATE_PREFIX)
+def _is_date_row(row: Row) -> bool:
+    return len(row) > 0 and (row[0] or "").startswith(_DATE_PREFIX)
 
 
-def _parse_date_row(row: list[str | None]) -> date:
+def _parse_date_row(row: Row) -> date:
     match = _DATE_RE.match(row[0] or "")
     if match is None:
         raise ValueError(f"Malformed Data Zajęć row: {row[0]!r}")
@@ -57,11 +64,11 @@ def _parse_date_row(row: list[str | None]) -> date:
     return date(year, month, day)
 
 
-def _is_class_row(row: list[str | None]) -> bool:
+def _is_class_row(row: Row) -> bool:
     return len(row) > 1 and bool((row[1] or "").strip())
 
 
-def _parse_event(row: list[str | None], current: date) -> Event:
+def _parse_event(row: Row, current: date) -> Event:
     if len(row) < _COLUMN_COUNT:
         raise ValueError(
             f"Class row has {len(row)} columns, expected {_COLUMN_COUNT}: {row!r}"
@@ -95,7 +102,7 @@ def _parse_event(row: list[str | None], current: date) -> Event:
     )
 
 
-def _parse_time(text: str, row: list[str | None]) -> time:
+def _parse_time(text: str, row: Row) -> time:
     match = _TIME_RE.match(text)
     if match is None:
         raise ValueError(f"Malformed time {text!r} in row: {row!r}")

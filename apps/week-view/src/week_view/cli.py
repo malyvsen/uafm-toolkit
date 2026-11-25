@@ -35,18 +35,23 @@ def main(
     try:
         start, end = resolve_date_range(date_from, date_to, today=date.today())
         data = download_timetable(start, end, on_progress=print)
-        try:
-            events = parse_pdf(data)
-        except ValueError as exc:
-            raise WeekError(
-                "Nie udało się odczytać planu: nieoczekiwany format pliku."
-            ) from exc
+        events = parse_events(data)
         saved = render_weeks(events, output_dir)
     except (WeekError, CredentialsError, DownloadError) as exc:
         print(exc, file=sys.stderr)
         raise SystemExit(1) from exc
     for path in saved:
         print(f"Zapisano {path}")
+
+
+def parse_events(data: bytes) -> list[Event]:
+    """Parse downloaded PDF bytes, reporting an unrecognized layout in Polish."""
+    try:
+        return parse_pdf(data)
+    except ValueError as exc:
+        raise WeekError(
+            "Nie udało się odczytać planu: nieoczekiwany format pliku."
+        ) from exc
 
 
 def resolve_date_range(

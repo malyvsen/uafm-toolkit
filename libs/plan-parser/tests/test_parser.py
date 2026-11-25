@@ -131,9 +131,6 @@ HEADER_11_COL: list[str | None] = [
 ]
 
 
-def test_header_only_12_col_parses_to_no_events():
-    assert parse_tables([[HEADER_12_COL]]) == []
-
-
-def test_header_only_11_col_parses_to_no_events():
-    assert parse_tables([[HEADER_11_COL]]) == []
+@pytest.mark.parametrize("header", [HEADER_12_COL, HEADER_11_COL])
+def test_header_only_parses_to_no_events(header: list[str | None]):
+    assert parse_tables([[header]]) == []

@@ -58,17 +58,22 @@ def main(
     try:
         date_range = resolve_date_range(date_from, date_to, today=date.today())
         data = download_timetable(date_range.start, date_range.end, on_progress=print)
-        try:
-            events = parse_pdf(data)
-        except ValueError as exc:
-            raise OverlapError(
-                "Nie udało się odczytać planu: nieoczekiwany format pliku."
-            ) from exc
+        events = parse_events(data)
         path = render_overlap(events, output_dir, date_range)
     except (OverlapError, CredentialsError, DownloadError) as exc:
         print(exc, file=sys.stderr)
         raise SystemExit(1) from exc
     print(f"Zapisano {path}")
+
+
+def parse_events(data: bytes) -> list[Event]:
+    """Parse downloaded PDF bytes, reporting an unrecognized layout in Polish."""
+    try:
+        return parse_pdf(data)
+    except ValueError as exc:
+        raise OverlapError(
+            "Nie udało się odczytać planu: nieoczekiwany format pliku."
+        ) from exc
 
 
 def resolve_date_range(
