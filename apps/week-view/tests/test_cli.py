@@ -90,17 +90,47 @@ def test_default_range_is_current_plus_next_week():
     )
 
 
-def test_explicit_dates_pass_through():
+def test_explicit_dates_snap_to_full_weeks():
+    assert resolve_date_range(
+        date(2026, 10, 19), date(2026, 10, 25), today=date(2026, 10, 21)
+    ) == (date(2026, 10, 19), date(2026, 10, 25))
     assert resolve_date_range(
         date(2026, 10, 1), date(2026, 10, 31), today=date(2026, 10, 21)
-    ) == (date(2026, 10, 1), date(2026, 10, 31))
+    ) == (date(2026, 9, 28), date(2026, 11, 1))
 
 
-def test_only_one_date_fails_fast(tmp_path: Path):
+def test_single_date_gives_containing_week(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    assert resolve_date_range(date(2026, 10, 1), None, today=date(2026, 10, 21)) == (
+        date(2026, 9, 28),
+        date(2026, 10, 4),
+    )
+    assert resolve_date_range(None, date(2026, 10, 31), today=date(2026, 10, 21)) == (
+        date(2026, 10, 26),
+        date(2026, 11, 1),
+    )
+
+    calls = stub_download(monkeypatch, SINGLE.read_bytes())
+    main(date_from=date(2026, 10, 1), output_dir=tmp_path)
+    assert calls == [(date(2026, 9, 28), date(2026, 10, 4))]
+
+    calls = stub_download(monkeypatch, SINGLE.read_bytes())
+    main(date_to=date(2026, 10, 31), output_dir=tmp_path)
+    assert calls == [(date(2026, 10, 26), date(2026, 11, 1))]
+
+
+def test_reversed_range_fails_fast(tmp_path: Path):
+    with pytest.raises(WeekError):
+        resolve_date_range(
+            date(2026, 10, 31), date(2026, 10, 1), today=date(2026, 10, 21)
+        )
     with pytest.raises(SystemExit):
-        main(date_from=date(2026, 10, 1), output_dir=tmp_path)
-    with pytest.raises(SystemExit):
-        main(date_to=date(2026, 10, 31), output_dir=tmp_path)
+        main(
+            date_from=date(2026, 10, 31),
+            date_to=date(2026, 10, 1),
+            output_dir=tmp_path,
+        )
 
 
 def test_main_downloads_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -110,7 +140,7 @@ def test_main_downloads_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         date_to=date(2026, 10, 31),
         output_dir=tmp_path,
     )
-    assert calls == [(date(2026, 10, 1), date(2026, 10, 31))]
+    assert calls == [(date(2026, 9, 28), date(2026, 11, 1))]
     assert list(tmp_path.glob("*.pdf")) == []
     assert (tmp_path / "plan-2026-10-19.png").exists()
 
