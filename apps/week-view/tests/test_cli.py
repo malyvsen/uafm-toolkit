@@ -174,6 +174,24 @@ def test_main_reversed_range_exits(tmp_path: Path):
         )
 
 
+def test_main_malformed_plan_exits_polishly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    stub_download(monkeypatch, b"%PDF-malformed")
+
+    def fail(_data: bytes) -> list[Event]:
+        raise ValueError("Unrecognized table row")
+
+    monkeypatch.setattr("week_view.cli.parse_pdf", fail)
+    with pytest.raises(SystemExit) as exc:
+        main(
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 31),
+            output_dir=tmp_path,
+        )
+    assert exc.value.code == 1
+
+
 def test_console_script_help():
     script = Path(sys.executable).parent / "week-view"
     ok = subprocess.run(

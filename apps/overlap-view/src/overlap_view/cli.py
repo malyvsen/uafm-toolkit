@@ -58,7 +58,13 @@ def main(
     try:
         date_range = resolve_date_range(date_from, date_to, today=date.today())
         data = download_timetable(date_range.start, date_range.end, on_progress=print)
-        path = render_overlap(parse_pdf(data), output_dir, date_range)
+        try:
+            events = parse_pdf(data)
+        except ValueError as exc:
+            raise OverlapError(
+                "Nie udało się odczytać planu: nieoczekiwany format pliku."
+            ) from exc
+        path = render_overlap(events, output_dir, date_range)
     except (OverlapError, CredentialsError, DownloadError) as exc:
         print(exc, file=sys.stderr)
         raise SystemExit(1) from exc

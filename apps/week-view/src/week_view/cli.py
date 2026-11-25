@@ -35,7 +35,13 @@ def main(
     try:
         start, end = resolve_date_range(date_from, date_to, today=date.today())
         data = download_timetable(start, end, on_progress=print)
-        saved = render_weeks(parse_pdf(data), output_dir)
+        try:
+            events = parse_pdf(data)
+        except ValueError as exc:
+            raise WeekError(
+                "Nie udało się odczytać planu: nieoczekiwany format pliku."
+            ) from exc
+        saved = render_weeks(events, output_dir)
     except (WeekError, CredentialsError, DownloadError) as exc:
         print(exc, file=sys.stderr)
         raise SystemExit(1) from exc
