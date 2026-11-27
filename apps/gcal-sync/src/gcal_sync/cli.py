@@ -4,7 +4,7 @@ import sys
 from collections.abc import Callable, Iterator
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 from zoneinfo import ZoneInfo
 
 import cyclopts
@@ -24,6 +24,7 @@ from gcal_sync.google_auth import (
     GcalError,
     authorize_interactively,
     build_service,
+    default_token_path,
     load_cached_credentials,
     load_client_config,
     resolve_token_path,
@@ -37,17 +38,56 @@ app = cyclopts.App(
     help="Push the study plan to Google Calendar from your laptop.",
 )
 
+DateFrom = Annotated[
+    date | None,
+    cyclopts.Parameter(
+        help="First day to sync; needs --date-to.",
+        show_default="remaining teaching period",
+    ),
+]
+DateTo = Annotated[
+    date | None,
+    cyclopts.Parameter(
+        help="Last day to sync; needs --date-from.",
+        show_default="remaining teaching period",
+    ),
+]
+CalendarName = Annotated[
+    str, cyclopts.Parameter(help="Calendar name to find or create.")
+]
+CalendarId = Annotated[
+    str | None,
+    cyclopts.Parameter(
+        help="Calendar ID; finds or creates --calendar-name when missing.",
+        show_default="from --calendar-name",
+    ),
+]
+TokenPath = Annotated[
+    Path | None,
+    cyclopts.Parameter(
+        help="Token cache file (env GCAL_TOKEN_PATH).",
+        show_default=lambda _: str(default_token_path()),
+    ),
+]
+ClientSecrets = Annotated[
+    Path | None,
+    cyclopts.Parameter(
+        help="OAuth client JSON (env GCAL_CLIENT_SECRETS_FILE or GCAL_CLIENT_ID/SECRET).",
+        show_default="from env",
+    ),
+]
+DryRun = Annotated[bool, cyclopts.Parameter(help="Preview counts without writing.")]
+
 
 @app.default
 def sync(
     *,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    calendar_name: str = DEFAULT_CALENDAR_NAME,
-    calendar_id: str | None = None,
-    token_path: Path | None = None,
-    client_secrets: Path | None = None,
-    dry_run: bool = False,
+    date_from: DateFrom = None,
+    date_to: DateTo = None,
+    calendar_name: CalendarName = DEFAULT_CALENDAR_NAME,
+    calendar_id: CalendarId = None,
+    token_path: TokenPath = None,
+    dry_run: DryRun = False,
 ) -> None:
     """Sync the remaining teaching period (or an explicit range) to Google."""
     try:
@@ -81,8 +121,8 @@ def sync(
 @app.command
 def auth(
     *,
-    token_path: Path | None = None,
-    client_secrets: Path | None = None,
+    token_path: TokenPath = None,
+    client_secrets: ClientSecrets = None,
 ) -> None:
     """Authorize Google Calendar access once (opens a browser)."""
     try:

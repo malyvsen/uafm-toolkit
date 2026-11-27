@@ -230,3 +230,20 @@ def test_console_script_help():
         check=False,
     )
     assert ok.returncode == 0, ok.stderr
+    assert "remaining teaching period" in ok.stdout
+    assert "from --calendar-name" in ok.stdout
+    assert "gcal-token.json" in ok.stdout
+    assert "--client-secrets" not in ok.stdout
+
+
+def test_auth_help_shows_client_defaults():
+    script = Path(sys.executable).parent / "gcal-sync"
+    ok = subprocess.run(
+        [str(script), "auth", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert ok.returncode == 0, ok.stderr
+    assert "gcal-token.json" in ok.stdout
+    assert "from env" in ok.stdout
