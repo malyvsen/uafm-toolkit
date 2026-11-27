@@ -10,7 +10,7 @@ CLI that pushes the study plan to Google Calendar from your laptop. No server.
    GCAL_CLIENT_ID=
    GCAL_CLIENT_SECRET=
    ```
-   Or point at the downloaded JSON: `--client-secrets client_secrets.json`.
+   Or point at the downloaded JSON: `task auth -- --client-secrets client_secrets.json`.
 3. Authorize (opens a browser, caches a refresh token outside the repo):
    ```sh
    task auth
