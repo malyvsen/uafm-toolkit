@@ -204,3 +204,5 @@ def test_console_script_help():
         check=False,
     )
     assert ok.returncode == 0, ok.stderr
+    assert "this week + next" in ok.stdout
+    assert "Where to save PNGs" in ok.stdout

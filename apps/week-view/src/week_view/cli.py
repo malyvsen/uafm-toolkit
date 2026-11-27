@@ -3,6 +3,7 @@
 import sys
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Annotated
 
 import cyclopts
 import platformdirs
@@ -19,6 +20,22 @@ app = cyclopts.App(
 
 DEFAULT_OUTPUT_DIR = Path(platformdirs.user_downloads_dir())
 
+DateFrom = Annotated[
+    date | None,
+    cyclopts.Parameter(
+        help="First day; snaps to Monday.",
+        show_default="this week + next",
+    ),
+]
+DateTo = Annotated[
+    date | None,
+    cyclopts.Parameter(
+        help="Last day; snaps to Sunday.",
+        show_default="this week + next",
+    ),
+]
+OutputDir = Annotated[Path, cyclopts.Parameter(help="Where to save PNGs.")]
+
 
 class WeekError(Exception):
     """A user-facing failure with a ready-to-print Polish message."""
@@ -27,9 +44,9 @@ class WeekError(Exception):
 @app.default
 def main(
     *,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    date_from: DateFrom = None,
+    date_to: DateTo = None,
+    output_dir: OutputDir = DEFAULT_OUTPUT_DIR,
 ) -> None:
     """Generate every week as dated PNGs."""
     try:
