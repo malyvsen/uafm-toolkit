@@ -4,6 +4,7 @@ import sys
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Annotated
 
 import cyclopts
 import platformdirs
@@ -25,6 +26,22 @@ app = cyclopts.App(
 )
 
 DEFAULT_OUTPUT_DIR = Path(platformdirs.user_downloads_dir())
+
+DateFrom = Annotated[
+    date | None,
+    cyclopts.Parameter(
+        help="First day to overlap; needs --date-to.",
+        show_default="remaining teaching period",
+    ),
+]
+DateTo = Annotated[
+    date | None,
+    cyclopts.Parameter(
+        help="Last day to overlap; needs --date-from.",
+        show_default="remaining teaching period",
+    ),
+]
+OutputDir = Annotated[Path, cyclopts.Parameter(help="Where to save the PNG.")]
 
 
 class OverlapError(Exception):
@@ -50,9 +67,9 @@ class CustomRange:
 @app.default
 def main(
     *,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    date_from: DateFrom = None,
+    date_to: DateTo = None,
+    output_dir: OutputDir = DEFAULT_OUTPUT_DIR,
 ) -> None:
     """Overlap every week in the range into one typical-week PNG."""
     try:
