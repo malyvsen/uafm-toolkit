@@ -21,8 +21,8 @@ from overlap_view.cli import (
     render_overlap,
     resolve_date_range,
 )
-from overlap_view.semester import SemesterIdentity, semester_remainder
 from plan_parser import Event, parse_pdf
+from semester import SemesterIdentity, semester_remainder
 
 FIXTURES = (
     Path(__file__).resolve().parents[3] / "libs" / "plan-parser" / "tests" / "fixtures"

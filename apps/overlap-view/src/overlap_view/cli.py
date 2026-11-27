@@ -11,13 +11,13 @@ import platformdirs
 from auth import CredentialsError
 from overlap_view.clustering import cluster_events
 from overlap_view.renderer import render_typical
-from overlap_view.semester import (
+from plan_downloader import DownloadError, download_timetable
+from plan_parser import Event, parse_pdf
+from semester import (
     SemesterIdentity,
     semester_identity,
     semester_remainder,
 )
-from plan_downloader import DownloadError, download_timetable
-from plan_parser import Event, parse_pdf
 
 app = cyclopts.App(
     name="overlap-view",

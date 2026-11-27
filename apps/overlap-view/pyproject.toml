@@ -11,6 +11,7 @@ dependencies = [
     "plan-parser",
     "plan-render",
     "platformdirs>=4.14.8",
+    "semester",
 ]
 
 [project.scripts]
@@ -28,6 +29,7 @@ auth = { workspace = true }
 plan-downloader = { workspace = true }
 plan-parser = { workspace = true }
 plan-render = { workspace = true }
+semester = { workspace = true }
 
 [tool.deptry.per_rule_ignores]
 DEP003 = ["overlap_view"]

@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from overlap_view.semester import (
+from semester import (
     SemesterIdentity,
     semester_identity,
     semester_remainder,
