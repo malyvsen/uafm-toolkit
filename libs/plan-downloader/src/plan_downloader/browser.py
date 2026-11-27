@@ -115,7 +115,7 @@ def _set_date_range(page: Page, date_from: date, date_to: date) -> None:
     _type_masked_date(page, "DataOd", date_from)
     _verify_date_range(page, date_from, date_to)
     page.get_by_role("link", name="Szukaj").click()
-    _wait_for_results(page)
+    _wait_for_results(page, date_from, date_to)
 
 
 def _type_masked_date(page: Page, field: str, target: date) -> None:
@@ -143,12 +143,29 @@ def _digits(text: str) -> str:
     return "".join(char for char in text if char.isdigit())
 
 
-def _wait_for_results(page: Page) -> None:
-    """Wait until the search shows classes or an explicit empty state."""
-    classes = page.get_by_text("Data Zajęć:")
-    empty = page.get_by_text("Brak danych")
+def _wait_for_results(page: Page, date_from: date, date_to: date) -> None:
+    """Wait until the visible results belong to the requested search.
+
+    The page keeps the previous search on screen until the new one loads,
+    so any "Data Zajęć:" row is not enough: require a row inside the
+    requested range. ISO dates sort lexicographically, so string comparison
+    is sufficient.
+    """
     try:
-        classes.or_(empty).wait_for(timeout=30000)
+        page.wait_for_function(
+            """([fromISO, toISO]) => {
+                const text = document.body.innerText ?? "";
+                if (text.includes("Brak danych")) return true;
+                const rows = text.matchAll(/Data Zajęć:\\s*(\\d{4})\\.(\\d{2})\\.(\\d{2})/g);
+                for (const row of rows) {
+                    const iso = `${row[1]}-${row[2]}-${row[3]}`;
+                    if (iso >= fromISO && iso <= toISO) return true;
+                }
+                return false;
+            }""",
+            arg=[date_from.isoformat(), date_to.isoformat()],
+            timeout=30000,
+        )
     except TimeoutError:
         raise DownloadError(
             "Nie znaleziono wyników wyszukiwania. Spróbuj ponownie."
